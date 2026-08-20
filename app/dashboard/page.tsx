@@ -8,11 +8,17 @@ export default function MyDhobhiGhatApp() {
 
   // UI States
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
   const [isProfilePopupOpen, setIsProfilePopupOpen] = useState<boolean>(false);
   const [isNotificationOpen, setIsNotificationOpen] = useState<boolean>(false);
   const [currentTime, setCurrentTime] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+
+  // Popups
+  const [selectedCustomerProfile, setSelectedCustomerProfile] =
+    useState<any>(null);
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState<any>(null);
 
   // Notifications State
   const [notifications, setNotifications] = useState<any[]>([]);
@@ -60,10 +66,29 @@ export default function MyDhobhiGhatApp() {
     pendingPickups: 0,
     delivery: 0,
     totalExpenses: 0,
+    todayRev: 0,
+    todayOrders: 0,
+    monthRev: 0,
+    monthOrders: 0,
+    yearRev: 0,
+    yearOrders: 0,
   });
   const [ordersList, setOrdersList] = useState<any[]>([]);
   const [payrollList, setPayrollList] = useState<any[]>([]);
   const [reportsList, setReportsList] = useState<any[]>([]);
+
+  // Responsive Check
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 992;
+      setIsMobile(mobile);
+      if (mobile) setIsSidebarCollapsed(true);
+      else setIsSidebarCollapsed(false);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   // ================= BROWSER AUDIO UNLOCKER =================
   useEffect(() => {
@@ -176,10 +201,47 @@ export default function MyDhobhiGhatApp() {
   }, []);
 
   const updateDashboardStats = (orders: any[]) => {
-    const totalRev = orders.reduce(
-      (sum: any, o: any) => sum + (parseFloat(o.total_amount) || 0),
-      0,
-    );
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    const monthStr = now.toISOString().slice(0, 7);
+    const yearStr = now.getFullYear().toString();
+
+    let revToday = 0,
+      revMonth = 0,
+      revYear = 0,
+      totalRev = 0;
+    let ordToday = 0,
+      ordMonth = 0,
+      ordYear = 0;
+
+    orders.forEach((o: any) => {
+      // Don't count rejected orders towards revenue
+      if (o.status !== "Rejected") {
+        const amt = parseFloat(o.total_amount) || 0;
+        totalRev += amt;
+
+        if (o.created_at) {
+          const d = new Date(o.created_at);
+          const dDate = d.toISOString().split("T")[0];
+          const dMonth = d.toISOString().slice(0, 7);
+          const dYear = d.getFullYear().toString();
+
+          if (dDate === todayStr) {
+            revToday += amt;
+            ordToday++;
+          }
+          if (dMonth === monthStr) {
+            revMonth += amt;
+            ordMonth++;
+          }
+          if (dYear === yearStr) {
+            revYear += amt;
+            ordYear++;
+          }
+        }
+      }
+    });
+
     setDashboardStats((prev: any) => ({
       ...prev,
       totalOrders: orders.length,
@@ -189,6 +251,12 @@ export default function MyDhobhiGhatApp() {
       ).length,
       delivery: orders.filter((o: any) => o.status === "Out for Delivery")
         .length,
+      todayRev: revToday,
+      todayOrders: ordToday,
+      monthRev: revMonth,
+      monthOrders: ordMonth,
+      yearRev: revYear,
+      yearOrders: ordYear,
     }));
   };
 
@@ -208,7 +276,7 @@ export default function MyDhobhiGhatApp() {
   const addNotification = (message: string) => {
     setNotifications((prev: any[]) => [
       {
-        id: Date.now(),
+        id: Date.now() + Math.random(),
         message,
         timestamp: new Date().toLocaleTimeString("en-IN", {
           hour: "2-digit",
@@ -232,10 +300,8 @@ export default function MyDhobhiGhatApp() {
         (payload: any) => {
           setOrdersList((prev: any[]) => [payload.new, ...prev]);
 
-          // ADMIN / MANAGER ALERTS
           if (userProfile.role === "admin" || userProfile.role === "manager") {
             playNotificationSound();
-
             const msg = `New order #${payload.new.order_id} placed by ${payload.new.customer_name}!`;
             addNotification(msg);
 
@@ -247,13 +313,11 @@ export default function MyDhobhiGhatApp() {
                 <div class="mb-2"><i class="bi bi-person-fill text-muted me-2"></i> <strong>Name:</strong> ${payload.new.customer_name}</div>
                 <div class="mb-2"><i class="bi bi-telephone-fill text-muted me-2"></i> <strong>Phone:</strong> ${payload.new.customer_phone}</div>
                 <div class="mb-3"><i class="bi bi-geo-alt-fill text-muted me-2"></i> <strong>Location:</strong> ${payload.new.location}</div>
-                
                 <div class="mb-2"><i class="bi bi-bag-check-fill text-muted me-2"></i> <strong>Order Summary:</strong></div>
                 <div class="bg-white p-3 rounded border mb-3 small" style="max-height: 120px; overflow-y: auto;">
                   ${payload.new.service_type}
                 </div>
-                
-                <div class="d-flex justify-content-between align-items-center bg-white p-3 rounded border-start border-4 border-success shadow-sm">
+                <div class="d-flex justify-content-between align-items-center bg-white p-3 rounded border-start border-4 border-success shadow-sm mt-3">
                   <span class="text-muted fw-bold">AMOUNT:</span>
                   <h4 class="fw-bold text-success mb-0">₹${payload.new.total_amount}</h4>
                 </div>
@@ -261,8 +325,8 @@ export default function MyDhobhiGhatApp() {
             `,
               width: "600px",
               confirmButtonText:
-                '<i class="bi bi-check2-circle me-1"></i> Acknowledge Order',
-              confirmButtonColor: "#3b82f6",
+                '<i class="bi bi-check2-circle me-1"></i> Acknowledge',
+              confirmButtonColor: "#0d6efd",
               allowOutsideClick: false,
               backdrop: `rgba(0,0,0,0.85)`,
             });
@@ -279,24 +343,32 @@ export default function MyDhobhiGhatApp() {
             ),
           );
 
-          // CUSTOMER ALERTS
           if (
             userProfile.role === "user" &&
             payload.new.customer_name === userProfile.full_name
           ) {
             if (payload.old.status !== payload.new.status) {
               playNotificationSound();
-              const msg = `Your order id: #${payload.new.order_id} status has been updated to ${payload.new.status}!`;
+
+              // If rejected, include the reason in the notification
+              let msg = `Your order id: #${payload.new.order_id} status has been updated to ${payload.new.status}!`;
+              if (payload.new.status === "Rejected") {
+                msg = `Your order id: #${payload.new.order_id} was Rejected. Reason: ${payload.new.rejection_reason}`;
+              }
+
               addNotification(msg);
 
               Swal.fire({
-                title: "Order Update",
+                title:
+                  payload.new.status === "Rejected"
+                    ? "Order Rejected"
+                    : "Order Update",
                 text: msg,
-                icon: "success",
+                icon: payload.new.status === "Rejected" ? "error" : "success",
                 toast: true,
                 position: "top-end",
                 showConfirmButton: false,
-                timer: 5000,
+                timer: 6000,
               });
             }
           }
@@ -313,9 +385,38 @@ export default function MyDhobhiGhatApp() {
     updateDashboardStats(ordersList);
   }, [ordersList]);
 
-  // ================= UTILITY FUNCTIONS =================
-  const handleExportPDF = () => {
-    window.print();
+  // ================= UTILITY & DYNAMIC FUNCTIONS =================
+  const handleExportPDF = () => window.print();
+
+  const handleContactSupport = () => {
+    if (userProfile?.role === "admin" || userProfile?.role === "manager") {
+      Swal.fire({
+        title: "Zen-Tech Support",
+        html: `
+          <div class="text-start mt-3 bg-light p-3 rounded-3 border">
+            <p class="mb-2"><i class="bi bi-envelope-fill text-primary me-2"></i> <strong>Email:</strong> zentechindiaofficial@gmail.com</p>
+            <p class="mb-0"><i class="bi bi-whatsapp text-success me-2"></i> <strong>WhatsApp:</strong> +91 7738342274</p>
+          </div>
+        `,
+        icon: "info",
+        confirmButtonText: "Close",
+        confirmButtonColor: "#0d6efd",
+      });
+    } else {
+      Swal.fire({
+        title: "Store Support",
+        html: `
+          <div class="text-start mt-3 bg-light p-3 rounded-3 border">
+            <p class="mb-2"><i class="bi bi-person-badge-fill text-primary me-2"></i> <strong>Owner:</strong> Avinash Hirwale</p>
+            <p class="mb-2"><i class="bi bi-telephone-fill text-success me-2"></i> <strong>Contact:</strong> +91 98765 43210</p>
+            <p class="mb-0"><i class="bi bi-geo-alt-fill text-danger me-2"></i> <strong>Address:</strong> My Dhobi Ghat, Main Street</p>
+          </div>
+        `,
+        icon: "info",
+        confirmButtonText: "Close",
+        confirmButtonColor: "#0d6efd",
+      });
+    }
   };
 
   const handleUnlockSalary = () => {
@@ -323,27 +424,20 @@ export default function MyDhobhiGhatApp() {
       setIsSalaryVisible(false);
       return;
     }
-
     Swal.fire({
       title: "Enter Admin Password",
       input: "password",
       showCancelButton: true,
       confirmButtonText: "Unlock",
-      confirmButtonColor: "#4caf50",
+      confirmButtonColor: "#0d6efd",
     }).then((result: any) => {
       if (result.isConfirmed && result.value === "123456") {
         setIsSalaryVisible(true);
-        Swal.fire({
-          icon: "success",
-          title: "Unlocked!",
-          showConfirmButton: false,
-          timer: 1000,
-        });
       } else if (result.isConfirmed) {
         Swal.fire({
           icon: "error",
           title: "Incorrect Password",
-          confirmButtonColor: "#2b2e3e",
+          confirmButtonColor: "#0a1128",
         });
       }
     });
@@ -410,12 +504,6 @@ export default function MyDhobhiGhatApp() {
         is_first_login: false,
       }));
       setIsOnboardingOpen(false);
-      Swal.fire({
-        icon: "success",
-        title: "Profile Saved Successfully!",
-        showConfirmButton: false,
-        timer: 1500,
-      });
     }
   };
 
@@ -459,6 +547,7 @@ export default function MyDhobhiGhatApp() {
           service_type: orderDetailsSummary,
           total_amount: totalAmount,
           status: "Pickup",
+          rejection_reason: null,
         },
       ])
       .select();
@@ -468,9 +557,9 @@ export default function MyDhobhiGhatApp() {
       Swal.fire({
         icon: "success",
         title: "Order Placed!",
-        text: `Your unique Order ID is #${data[0].order_id}`,
+        text: `Order ID #${data[0].order_id}`,
         timer: 2500,
-        showConfirmButton: true,
+        showConfirmButton: false,
       });
       setActiveSection("dashboard");
     } else {
@@ -478,17 +567,77 @@ export default function MyDhobhiGhatApp() {
     }
   };
 
+  // ================= ORDER STATUS UPDATE (WITH REJECTION LOGIC) =================
   const handleOrderStatusUpdate = async (orderId: any, newStatus: any) => {
-    const { error } = await supabase
-      .from("laundry_orders")
-      .update({ status: newStatus })
-      .eq("order_id", orderId);
-    if (error)
-      Swal.fire(
-        "Database Error",
-        `Failed to update status: ${error.message}`,
-        "error",
-      );
+    if (newStatus === "Rejected") {
+      const { value: formValues, isDismissed } = await Swal.fire({
+        title: "Reject Order",
+        html: `
+          <div class="text-start">
+            <p class="text-muted small mb-3">Please select or provide a reason for rejecting this order to inform the customer.</p>
+            <label class="form-label fw-bold small text-dark">Select a predefined reason:</label>
+            <select id="swal-reject-reason" class="form-select bg-light mb-3">
+              <option value="">-- No predefined reason (Write below) --</option>
+              <option value="Shop operation hours are over">Shop operation hours are over</option>
+              <option value="Store is full / Running on high demand">Store is full / Running on high demand</option>
+              <option value="Service temporarily unavailable">Service temporarily unavailable</option>
+              <option value="Out of delivery coverage area">Out of delivery coverage area</option>
+            </select>
+            <label class="form-label fw-bold small text-dark">Or write a manual reason <span class="text-danger">*</span></label>
+            <textarea id="swal-reject-manual" class="form-control bg-light" rows="3" placeholder="Type custom reason here..."></textarea>
+          </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: "Confirm Rejection",
+        confirmButtonColor: "#dc3545",
+        preConfirm: () => {
+          const selectReason = (
+            document.getElementById("swal-reject-reason") as HTMLSelectElement
+          ).value;
+          const manualReason = (
+            document.getElementById("swal-reject-manual") as HTMLTextAreaElement
+          ).value.trim();
+
+          if (!selectReason && !manualReason) {
+            Swal.showValidationMessage(
+              "You must select a predefined reason OR write a manual one.",
+            );
+            return false;
+          }
+          return selectReason ? selectReason : manualReason;
+        },
+      });
+
+      if (isDismissed) {
+        setOrdersList([...ordersList]);
+        return;
+      }
+
+      const { error } = await supabase
+        .from("laundry_orders")
+        .update({ status: "Rejected", rejection_reason: formValues })
+        .eq("order_id", orderId);
+
+      if (error)
+        Swal.fire(
+          "Database Error",
+          `Failed to reject: ${error.message}`,
+          "error",
+        );
+    } else {
+      const { error } = await supabase
+        .from("laundry_orders")
+        .update({ status: newStatus, rejection_reason: null })
+        .eq("order_id", orderId);
+
+      if (error)
+        Swal.fire(
+          "Database Error",
+          `Failed to update status: ${error.message}`,
+          "error",
+        );
+    }
   };
 
   const handleAddStaffSubmit = async (e: any) => {
@@ -504,21 +653,17 @@ export default function MyDhobhiGhatApp() {
         },
       ])
       .select();
-    if (error)
-      return Swal.fire(
-        "Error",
-        "Could not add staff: " + error.message,
-        "error",
-      );
-    if (data) setPayrollList((prev: any[]) => [data[0], ...prev]);
-    setNewStaff({ name: "", designation: "", salary: "" });
-    setIsAddStaffModalOpen(false);
-    Swal.fire({
-      icon: "success",
-      title: "Staff Added!",
-      showConfirmButton: false,
-      timer: 1500,
-    });
+    if (!error && data) {
+      setPayrollList((prev: any[]) => [data[0], ...prev]);
+      setNewStaff({ name: "", designation: "", salary: "" });
+      setIsAddStaffModalOpen(false);
+      Swal.fire({
+        icon: "success",
+        title: "Staff Added!",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    }
   };
 
   const handleAddExpenseSubmit = async (e: any) => {
@@ -533,21 +678,17 @@ export default function MyDhobhiGhatApp() {
         },
       ])
       .select();
-    if (error)
-      return Swal.fire(
-        "Error",
-        "Could not log expense: " + error.message,
-        "error",
-      );
-    if (data) setReportsList((prev: any[]) => [data[0], ...prev]);
-    setNewExpense({ category: "", description: "", amount: "" });
-    setIsAddExpenseModalOpen(false);
-    Swal.fire({
-      icon: "success",
-      title: "Expense Logged!",
-      showConfirmButton: false,
-      timer: 1500,
-    });
+    if (!error && data) {
+      setReportsList((prev: any[]) => [data[0], ...prev]);
+      setNewExpense({ category: "", description: "", amount: "" });
+      setIsAddExpenseModalOpen(false);
+      Swal.fire({
+        icon: "success",
+        title: "Expense Logged!",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    }
   };
 
   const markAllNotificationsRead = () => {
@@ -558,63 +699,240 @@ export default function MyDhobhiGhatApp() {
   };
   const unreadCount = notifications.filter((n: any) => !n.read).length;
 
-  const sidebarWidth = isSidebarCollapsed ? "80px" : "250px";
+  // Responsive Sidebar Width handling
+  const sidebarWidth = isMobile
+    ? "260px"
+    : isSidebarCollapsed
+      ? "80px"
+      : "260px";
+
+  // ================= BADGE STYLES =================
   const getOrderStatusStyle = (status: any) => {
     switch (status) {
       case "Pickup":
-        return "bg-secondary bg-opacity-10 text-secondary border-secondary";
+        return "bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25";
       case "Received":
-        return "bg-info bg-opacity-10 text-info border-info";
+        return "bg-info bg-opacity-10 text-info border border-info border-opacity-25";
       case "In Progress":
-        return "bg-warning bg-opacity-10 text-warning border-warning";
+        return "bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25";
       case "Finished":
-        return "bg-success bg-opacity-10 text-success border-success";
+        return "bg-success bg-opacity-10 text-success border border-success border-opacity-25";
       case "Out for Delivery":
-        return "bg-primary bg-opacity-10 text-primary border-primary";
+        return "bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25";
+      case "Rejected":
+        return "bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25";
       default:
-        return "bg-secondary bg-opacity-10 text-secondary border-secondary";
+        return "bg-light text-secondary border border-secondary border-opacity-25";
     }
   };
 
   const getPayrollStatusStyle = (status: any) => {
     switch (status) {
       case "Paid":
-        return "bg-success bg-opacity-10 text-success border-success";
+        return "bg-success bg-opacity-10 text-success border border-success border-opacity-25";
       case "Overdue":
-        return "bg-danger bg-opacity-10 text-danger border-danger";
+        return "bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25";
       case "Pending":
-        return "bg-warning bg-opacity-10 text-warning border-warning";
+        return "bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25";
       default:
-        return "bg-secondary bg-opacity-10 text-secondary border-secondary";
+        return "bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25";
     }
   };
+
+  const firstName = userProfile?.full_name
+    ? userProfile.full_name.split(" ")[0]
+    : "Tejas";
 
   return (
     <div
       className="d-flex w-100 position-relative"
-      style={{ minHeight: "100vh", backgroundColor: "#f4f5f7" }}
+      style={{
+        minHeight: "100vh",
+        backgroundColor: "#F8F9FB",
+        overflowX: "hidden",
+      }}
     >
-      {/* HIDDEN AUDIO ELEMENT FOR NOTIFICATIONS */}
+      {/* HIDDEN AUDIO ELEMENT */}
       <audio
         id="notificationSound"
         src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
         preload="auto"
       ></audio>
 
-      {/* ================= MODALS & POPUPS ================= */}
+      {/* ================= MODALS ================= */}
+
+      {/* ORDER DETAILS POPUP (For Admins to see what users ordered) */}
+      {selectedOrderDetails && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center fade-in"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-4 p-md-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "500px" }}
+          >
+            <button
+              onClick={() => setSelectedOrderDetails(null)}
+              className="btn-close position-absolute top-0 end-0 m-4"
+            ></button>
+            <div className="text-center mb-4">
+              <div
+                className="rounded-circle bg-primary bg-opacity-10 text-primary d-flex justify-content-center align-items-center mx-auto mb-3 shadow-sm border border-primary border-opacity-25"
+                style={{ width: "60px", height: "60px", fontSize: "2rem" }}
+              >
+                <i className="bi bi-receipt"></i>
+              </div>
+              <h4 className="fw-bold text-dark mb-1">
+                Order #{selectedOrderDetails.order_id}
+              </h4>
+              <span className="badge bg-light text-secondary border px-3 py-1 mt-1">
+                {new Date(selectedOrderDetails.created_at).toLocaleString(
+                  "en-IN",
+                  { dateStyle: "medium", timeStyle: "short" },
+                )}
+              </span>
+            </div>
+
+            <div className="bg-light p-3 rounded-4 mb-3 border shadow-sm">
+              <h6 className="fw-bold text-dark mb-2 border-bottom pb-2">
+                <i className="bi bi-person me-2 text-primary"></i>Customer
+                Information
+              </h6>
+              <div className="small text-secondary mb-1">
+                <strong>Name:</strong> {selectedOrderDetails.customer_name}
+              </div>
+              <div className="small text-secondary mb-1">
+                <strong>Phone:</strong> {selectedOrderDetails.customer_phone}
+              </div>
+              <div className="small text-secondary">
+                <strong>Address:</strong> {selectedOrderDetails.location}
+              </div>
+            </div>
+
+            <div className="bg-light p-3 rounded-4 mb-4 border shadow-sm">
+              <h6 className="fw-bold text-dark mb-2 border-bottom pb-2">
+                <i className="bi bi-bag-check me-2 text-primary"></i>Order Items
+              </h6>
+              <div
+                className="small text-dark mb-3"
+                style={{
+                  lineHeight: "1.6",
+                  maxHeight: "100px",
+                  overflowY: "auto",
+                }}
+              >
+                {selectedOrderDetails.service_type
+                  .split(",")
+                  .map((item: any, i: any) => (
+                    <div key={i} className="d-flex align-items-start mb-1">
+                      <i className="bi bi-dot text-primary me-1"></i>{" "}
+                      {item.trim()}
+                    </div>
+                  ))}
+              </div>
+              <div className="d-flex justify-content-between align-items-center pt-2 border-top">
+                <strong className="text-dark">Total Amount</strong>
+                <h5 className="fw-bold text-success mb-0">
+                  ₹{selectedOrderDetails.total_amount}
+                </h5>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSelectedOrderDetails(null)}
+              className="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm"
+            >
+              Close Invoice
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* CUSTOMER PROFILE POPUP (For Admins) */}
+      {selectedCustomerProfile && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center fade-in"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-4 p-md-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "400px" }}
+          >
+            <button
+              onClick={() => setSelectedCustomerProfile(null)}
+              className="btn-close position-absolute top-0 end-0 m-4"
+            ></button>
+            <div className="text-center mb-4">
+              <div
+                className="rounded-circle bg-primary bg-opacity-10 text-primary d-flex justify-content-center align-items-center mx-auto mb-3 shadow-sm border border-primary border-opacity-25"
+                style={{ width: "80px", height: "80px", fontSize: "2.5rem" }}
+              >
+                <i className="bi bi-person-circle"></i>
+              </div>
+              <h4 className="fw-bold text-dark mb-1">
+                {selectedCustomerProfile.name}
+              </h4>
+              <span className="badge bg-light text-secondary border px-3 py-1">
+                Customer Details
+              </span>
+            </div>
+
+            <div className="bg-light p-3 rounded-4 mb-4 border shadow-sm">
+              <div className="d-flex align-items-center mb-3">
+                <i className="bi bi-telephone-fill text-primary fs-5 me-3"></i>
+                <div>
+                  <small
+                    className="text-muted d-block"
+                    style={{ fontSize: "0.7rem", fontWeight: "bold" }}
+                  >
+                    PHONE NUMBER
+                  </small>
+                  <span className="fw-medium text-dark">
+                    {selectedCustomerProfile.phone}
+                  </span>
+                </div>
+              </div>
+              <div className="d-flex align-items-center">
+                <i className="bi bi-geo-alt-fill text-danger fs-5 me-3"></i>
+                <div>
+                  <small
+                    className="text-muted d-block"
+                    style={{ fontSize: "0.7rem", fontWeight: "bold" }}
+                  >
+                    FULL ADDRESS
+                  </small>
+                  <span
+                    className="fw-medium text-dark"
+                    style={{ lineHeight: "1.3", display: "block" }}
+                  >
+                    {selectedCustomerProfile.address}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={() => setSelectedCustomerProfile(null)}
+              className="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm"
+            >
+              Close Profile
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ADD EXPENSE MODAL */}
       {isAddExpenseModalOpen && (
         <div
           className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.75)", zIndex: 9999 }}
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
         >
           <div
             className="bg-white p-5 rounded-4 shadow-lg position-relative"
-            style={{ width: "450px" }}
+            style={{ width: "90%", maxWidth: "450px" }}
           >
             <div className="d-flex justify-content-between align-items-center mb-4">
-              <h5 className="fw-bold mb-0 text-dark">Log Business Expense</h5>
+              <h5 className="fw-bold mb-0 text-dark">Log Expense</h5>
               <button
                 onClick={() => setIsAddExpenseModalOpen(false)}
                 className="btn-close"
@@ -680,7 +998,7 @@ export default function MyDhobhiGhatApp() {
               </div>
               <button
                 type="submit"
-                className="btn btn-primary w-100 fw-bold py-2"
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3"
               >
                 Save Expense Record
               </button>
@@ -693,11 +1011,11 @@ export default function MyDhobhiGhatApp() {
       {isAddStaffModalOpen && (
         <div
           className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.75)", zIndex: 9999 }}
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
         >
           <div
             className="bg-white p-5 rounded-4 shadow-lg position-relative"
-            style={{ width: "450px" }}
+            style={{ width: "90%", maxWidth: "450px" }}
           >
             <div className="d-flex justify-content-between align-items-center mb-4">
               <h5 className="fw-bold mb-0 text-dark">Add New Staff</h5>
@@ -754,7 +1072,7 @@ export default function MyDhobhiGhatApp() {
               </div>
               <button
                 type="submit"
-                className="btn btn-primary w-100 fw-bold py-2"
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3"
               >
                 Save Staff Member
               </button>
@@ -767,15 +1085,20 @@ export default function MyDhobhiGhatApp() {
       {isOnboardingOpen && (
         <div
           className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.75)", zIndex: 9999 }}
+          style={{ backgroundColor: "rgba(0,0,0,0.8)", zIndex: 9999 }}
         >
           <div
-            className="bg-white p-5 rounded-4 shadow-lg position-relative"
-            style={{ width: "450px", maxHeight: "90vh", overflowY: "auto" }}
+            className="bg-white p-4 p-md-5 rounded-4 shadow-lg position-relative"
+            style={{
+              width: "90%",
+              maxWidth: "450px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+            }}
           >
-            <h3 className="fw-bold text-dark mb-2">Complete Your Profile</h3>
+            <h3 className="fw-bold text-dark mb-2">Complete Profile</h3>
             <p className="text-secondary small mb-4">
-              Please enter your name, phone number, and address.
+              Enter your details to continue.
             </p>
             <form onSubmit={handleOnboardingSubmit}>
               <div className="mb-3">
@@ -821,7 +1144,7 @@ export default function MyDhobhiGhatApp() {
                 <textarea
                   className="form-control bg-light border-0 py-2"
                   required
-                  rows="3"
+                  rows={3}
                   value={onboardingData.address}
                   onChange={(e: any) =>
                     setOnboardingData({
@@ -835,15 +1158,15 @@ export default function MyDhobhiGhatApp() {
               <div className="d-flex gap-2">
                 <button
                   type="submit"
-                  className="btn btn-primary w-100 fw-bold py-2"
+                  className="btn btn-primary w-100 fw-bold py-2 rounded-3"
                 >
-                  Save Profile Details
+                  Save Details
                 </button>
                 {userProfile?.full_name && (
                   <button
                     type="button"
                     onClick={() => setIsOnboardingOpen(false)}
-                    className="btn btn-outline-secondary px-3"
+                    className="btn btn-outline-secondary px-3 rounded-3"
                   >
                     Cancel
                   </button>
@@ -854,53 +1177,53 @@ export default function MyDhobhiGhatApp() {
         </div>
       )}
 
-      {/* LANDSCAPE PROFILE POPUP */}
+      {/* USER PROFILE POPUP */}
       {isProfilePopupOpen && (
         <div
           className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
-          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+          style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 9999 }}
         >
           <div
-            className="bg-white rounded-4 shadow-lg p-4 d-flex flex-row gap-4 align-items-center position-relative"
-            style={{ width: "580px", maxWidth: "95%" }}
+            className="bg-white rounded-4 shadow-lg p-4 d-flex flex-column flex-md-row gap-4 align-items-center position-relative"
+            style={{ width: "90%", maxWidth: "500px" }}
           >
             <button
               onClick={() => setIsProfilePopupOpen(false)}
               className="btn-close position-absolute top-0 end-0 m-3"
             ></button>
             <div
-              className="rounded-circle bg-primary text-white d-flex justify-content-center align-items-center fw-bold fs-2 shadow-sm"
-              style={{ width: "90px", height: "90px", flexShrink: 0 }}
+              className="rounded-circle bg-primary text-white d-flex justify-content-center align-items-center fw-bold fs-1 shadow-sm"
+              style={{ width: "80px", height: "80px", flexShrink: 0 }}
             >
               {userProfile?.full_name
                 ? userProfile.full_name[0].toUpperCase()
                 : "U"}
             </div>
-            <div className="flex-grow-1 pe-3">
+            <div className="flex-grow-1 text-center text-md-start">
               <h4 className="fw-bold text-dark mb-1">
                 {userProfile?.full_name || "No Name Set"}
               </h4>
               <p
-                className="text-muted small mb-2 text-uppercase fw-semibold"
+                className="text-muted small mb-3 text-uppercase fw-semibold"
                 style={{ fontSize: "0.75rem", letterSpacing: "0.5px" }}
               >
                 Role: {userProfile?.role || "user"}
               </p>
-              <div className="d-flex flex-column gap-1 mb-3 text-secondary small">
+              <div className="d-flex flex-column gap-2 mb-4 text-secondary small">
                 <div>
                   <i className="bi bi-envelope me-2 text-primary"></i>
                   {currentUser?.email}
                 </div>
                 <div>
                   <i className="bi bi-telephone me-2 text-primary"></i>
-                  {userProfile?.phone || "No phone number provided"}
+                  {userProfile?.phone || "No phone number"}
                 </div>
                 <div>
                   <i className="bi bi-geo-alt me-2 text-primary"></i>
-                  {userProfile?.address || "No address provided"}
+                  {userProfile?.address || "No address"}
                 </div>
               </div>
-              <div className="d-flex gap-2">
+              <div className="d-flex justify-content-center justify-content-md-start gap-2">
                 <button
                   onClick={() => {
                     setIsProfilePopupOpen(false);
@@ -911,13 +1234,13 @@ export default function MyDhobhiGhatApp() {
                     });
                     setIsOnboardingOpen(true);
                   }}
-                  className="btn btn-outline-primary btn-sm px-3 fw-medium"
+                  className="btn btn-outline-primary btn-sm px-3 fw-medium rounded-pill"
                 >
                   <i className="bi bi-pencil me-1"></i> Edit Profile
                 </button>
                 <button
                   onClick={handleLogout}
-                  className="btn btn-danger btn-sm px-3 fw-medium"
+                  className="btn btn-danger btn-sm px-3 fw-medium rounded-pill"
                 >
                   <i className="bi bi-box-arrow-right me-1"></i> Logout
                 </button>
@@ -927,119 +1250,252 @@ export default function MyDhobhiGhatApp() {
         </div>
       )}
 
-      {/* ================= SIDEBAR ================= */}
+      {/* ================= DARK UI SIDEBAR ================= */}
       <aside
-        className="d-flex flex-column bg-white shadow-sm transition-all"
+        className="d-flex flex-column transition-all shadow-lg"
         style={{
           width: sidebarWidth,
           position: "fixed",
           height: "100vh",
           zIndex: 1050,
-          borderRight: "1px solid #eaeaea",
-          transition: "width 0.3s ease",
+          backgroundColor: "#0A1128",
+          transition: "width 0.3s ease, transform 0.3s ease",
+          transform:
+            isMobile && isSidebarCollapsed
+              ? "translateX(-100%)"
+              : "translateX(0)",
+          overflowY: "auto",
+          overflowX: "hidden",
         }}
       >
         <div
-          className={`d-flex align-items-center ${isSidebarCollapsed ? "justify-content-center" : "px-4"}`}
-          style={{ height: "60px", backgroundColor: "#2b2e3e" }}
+          className={`d-flex align-items-center py-4 mb-2 ${isSidebarCollapsed && !isMobile ? "justify-content-center px-0" : "px-4"}`}
         >
-          <h5 className="text-white fw-bold mb-0 text-nowrap overflow-hidden d-flex align-items-center">
-            <i className="bi bi-droplet-half text-primary fs-4"></i>{" "}
-            {!isSidebarCollapsed && <span className="ms-2">MyDhobhiGhat</span>}
-          </h5>
+          <div
+            className="bg-white rounded-circle d-flex justify-content-center align-items-center shadow-sm"
+            style={{ width: "35px", height: "35px", flexShrink: 0 }}
+          >
+            <i className="bi bi-droplet-half text-primary fs-5"></i>
+          </div>
+          {(!isSidebarCollapsed || isMobile) && (
+            <div className="ms-3 text-white text-nowrap">
+              <h5 className="fw-bold mb-0" style={{ letterSpacing: "0.5px" }}>
+                MyDhobhi<span className="text-primary">Ghat</span>
+              </h5>
+              <small
+                className="text-white-50"
+                style={{
+                  fontSize: "0.65rem",
+                  display: "block",
+                  marginTop: "-2px",
+                }}
+              >
+                We Care Your Clothes
+              </small>
+            </div>
+          )}
         </div>
-        <div className="overflow-auto py-3">
-          <nav className="nav flex-column gap-1 px-2">
+
+        <div className="px-3 flex-grow-1">
+          <nav className="nav flex-column gap-2 mt-2">
             <button
-              onClick={() => setActiveSection("dashboard")}
-              className={`nav-link text-start w-100 fw-medium rounded d-flex align-items-center mb-1 border-0 ${activeSection === "dashboard" ? "text-primary shadow-sm" : "text-secondary hover-bg-light"} ${isSidebarCollapsed ? "justify-content-center" : ""}`}
+              title="Dashboard"
+              onClick={() => {
+                setActiveSection("dashboard");
+                if (isMobile) setIsSidebarCollapsed(true);
+              }}
+              className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "dashboard" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
               style={{
                 backgroundColor:
-                  activeSection === "dashboard" ? "#f4f6fb" : "transparent",
+                  activeSection === "dashboard" ? "#0d6efd" : "transparent",
               }}
             >
-              <i className="bi bi-house-door fs-5"></i>
-              {!isSidebarCollapsed && <span className="ms-3">Dashboard</span>}
+              <div className="d-flex align-items-center">
+                <i
+                  className={`bi bi-grid-1x2-fill fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                ></i>
+                {(!isSidebarCollapsed || isMobile) && <span>Dashboard</span>}
+              </div>
+              {(!isSidebarCollapsed || isMobile) &&
+                activeSection === "dashboard" && (
+                  <i className="bi bi-chevron-right small"></i>
+                )}
             </button>
+
             <button
-              onClick={() => setActiveSection("orders")}
-              className={`nav-link text-start w-100 fw-medium rounded d-flex align-items-center mb-1 border-0 ${activeSection === "orders" ? "text-primary shadow-sm" : "text-secondary hover-bg-light"} ${isSidebarCollapsed ? "justify-content-center" : ""}`}
+              title={userProfile?.role === "user" ? "Book Order" : "Orders"}
+              onClick={() => {
+                setActiveSection("orders");
+                if (isMobile) setIsSidebarCollapsed(true);
+              }}
+              className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "orders" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
               style={{
                 backgroundColor:
-                  activeSection === "orders" ? "#f4f6fb" : "transparent",
+                  activeSection === "orders" ? "#0d6efd" : "transparent",
               }}
             >
-              <i className="bi bi-box-seam fs-5"></i>
-              {!isSidebarCollapsed && (
-                <span className="ms-3">
-                  {userProfile?.role === "user" ? "Book Order" : "Orders"}
-                </span>
-              )}
+              <div className="d-flex align-items-center">
+                <i
+                  className={`bi bi-clipboard-check fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                ></i>
+                {(!isSidebarCollapsed || isMobile) && (
+                  <span>
+                    {userProfile?.role === "user" ? "Book Order" : "Orders"}
+                  </span>
+                )}
+              </div>
+              {(!isSidebarCollapsed || isMobile) &&
+                activeSection === "orders" && (
+                  <i className="bi bi-chevron-right small"></i>
+                )}
             </button>
 
             {userProfile?.role === "admin" && (
               <button
-                onClick={() => setActiveSection("payroll")}
-                className={`nav-link text-start w-100 fw-medium rounded d-flex align-items-center mb-1 border-0 ${activeSection === "payroll" ? "text-primary shadow-sm" : "text-secondary hover-bg-light"} ${isSidebarCollapsed ? "justify-content-center" : ""}`}
+                title="Payroll"
+                onClick={() => {
+                  setActiveSection("payroll");
+                  if (isMobile) setIsSidebarCollapsed(true);
+                }}
+                className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "payroll" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
                 style={{
                   backgroundColor:
-                    activeSection === "payroll" ? "#f4f6fb" : "transparent",
+                    activeSection === "payroll" ? "#0d6efd" : "transparent",
                 }}
               >
-                <i className="bi bi-wallet2 fs-5"></i>
-                {!isSidebarCollapsed && <span className="ms-3">Payroll</span>}
+                <div className="d-flex align-items-center">
+                  <i
+                    className={`bi bi-people fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                  ></i>
+                  {(!isSidebarCollapsed || isMobile) && <span>Payroll</span>}
+                </div>
+                {(!isSidebarCollapsed || isMobile) &&
+                  activeSection === "payroll" && (
+                    <i className="bi bi-chevron-right small"></i>
+                  )}
               </button>
             )}
+
             {userProfile?.role !== "user" && (
               <button
-                onClick={() => setActiveSection("reports")}
-                className={`nav-link text-start w-100 fw-medium rounded d-flex align-items-center mb-1 border-0 ${activeSection === "reports" ? "text-primary shadow-sm" : "text-secondary hover-bg-light"} ${isSidebarCollapsed ? "justify-content-center" : ""}`}
+                title="Reports"
+                onClick={() => {
+                  setActiveSection("reports");
+                  if (isMobile) setIsSidebarCollapsed(true);
+                }}
+                className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "reports" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
                 style={{
                   backgroundColor:
-                    activeSection === "reports" ? "#f4f6fb" : "transparent",
+                    activeSection === "reports" ? "#0d6efd" : "transparent",
                 }}
               >
-                <i className="bi bi-bar-chart fs-5"></i>
-                {!isSidebarCollapsed && <span className="ms-3">Reports</span>}
+                <div className="d-flex align-items-center">
+                  <i
+                    className={`bi bi-bar-chart-fill fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                  ></i>
+                  {(!isSidebarCollapsed || isMobile) && <span>Reports</span>}
+                </div>
+                {(!isSidebarCollapsed || isMobile) &&
+                  activeSection === "reports" && (
+                    <i className="bi bi-chevron-right small"></i>
+                  )}
               </button>
             )}
           </nav>
+
+          {/* Support Card / Icon */}
+          <div className="mt-5 pt-3 border-top border-secondary border-opacity-25 pb-4">
+            {!isSidebarCollapsed || isMobile ? (
+              <>
+                <div className="card bg-transparent border border-secondary border-opacity-25 rounded-4 p-3 mb-4">
+                  <div className="d-flex align-items-center text-white mb-2">
+                    <i className="bi bi-headset me-2 fs-5"></i>{" "}
+                    <h6 className="fw-semibold mb-0">Need Help?</h6>
+                  </div>
+                  <p
+                    className="small text-white-50 mb-3"
+                    style={{ fontSize: "0.75rem", lineHeight: "1.4" }}
+                  >
+                    Our support team is ready to help you anytime.
+                  </p>
+                  <button
+                    onClick={handleContactSupport}
+                    className="btn btn-outline-secondary btn-sm w-100 rounded-pill text-white fw-medium border-secondary border-opacity-50"
+                    style={{ fontSize: "0.75rem" }}
+                  >
+                    Contact Support
+                  </button>
+                </div>
+                <div
+                  className="text-white-50 small text-center"
+                  style={{ fontSize: "0.65rem" }}
+                >
+                  &copy; 2026 MyDhobhiGhat
+                  <br />
+                  All rights reserved.
+                </div>
+              </>
+            ) : (
+              <div className="d-flex flex-column align-items-center gap-3">
+                <button
+                  onClick={handleContactSupport}
+                  className="btn btn-outline-secondary rounded-circle d-flex justify-content-center align-items-center text-white border-secondary border-opacity-50"
+                  style={{ width: "40px", height: "40px" }}
+                  title="Contact Support"
+                >
+                  <i className="bi bi-headset"></i>
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </aside>
 
+      {/* OVERLAY FOR MOBILE SIDEBAR */}
+      {isMobile && !isSidebarCollapsed && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1040 }}
+          onClick={() => setIsSidebarCollapsed(true)}
+        ></div>
+      )}
+
       {/* ================= MAIN CONTENT ================= */}
       <main
-        className="w-100 transition-all"
+        className="w-100 transition-all d-flex flex-column"
         style={{
-          marginLeft: sidebarWidth,
+          marginLeft: isMobile ? "0px" : sidebarWidth,
           transition: "margin-left 0.3s ease",
+          minHeight: "100vh",
         }}
       >
+        {/* HEADER */}
         <header
-          className="bg-white d-flex justify-content-between align-items-center px-4 sticky-top shadow-sm"
-          style={{ height: "60px", zIndex: 1040 }}
+          className="bg-white d-flex justify-content-between align-items-center px-3 px-md-4 py-3 sticky-top border-bottom"
+          style={{ zIndex: 1030 }}
         >
-          <div className="d-flex align-items-center gap-4">
+          <div className="d-flex align-items-center gap-3">
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className="btn btn-link text-muted p-0 border-0 text-decoration-none"
+              className="btn btn-primary rounded-circle d-flex justify-content-center align-items-center p-0 shadow-sm"
+              style={{ width: "40px", height: "40px" }}
             >
-              <i className="bi bi-list fs-4"></i>
+              <i className="bi bi-list fs-5 text-white"></i>
             </button>
+          </div>
+
+          <div className="d-flex align-items-center gap-2 gap-md-4">
+            {/* Date Pill */}
             {currentTime && (
-              <div
-                className="text-muted fw-medium d-none d-md-block"
-                style={{ fontSize: "0.9rem" }}
-              >
-                <i className="bi bi-calendar3 me-2"></i>{" "}
+              <div className="d-none d-md-flex align-items-center text-secondary border rounded-pill px-3 py-2 small fw-medium bg-white">
+                <i className="bi bi-calendar3 me-2 text-dark"></i>
                 {currentTime.toLocaleDateString("en-IN", {
                   weekday: "short",
                   day: "2-digit",
                   month: "short",
                   year: "numeric",
-                })}{" "}
-                <span className="mx-2">|</span>
-                <i className="bi bi-clock me-2"></i>{" "}
+                })}
+                <span className="mx-2 text-muted">|</span>
                 {currentTime.toLocaleTimeString("en-IN", {
                   hour: "2-digit",
                   minute: "2-digit",
@@ -1047,19 +1503,19 @@ export default function MyDhobhiGhatApp() {
                 })}
               </div>
             )}
-          </div>
-          <div className="d-flex align-items-center gap-4">
+
             {/* NOTIFICATION BELL */}
             <div className="position-relative">
               <button
                 onClick={markAllNotificationsRead}
-                className="btn btn-light rounded-circle position-relative p-2 border shadow-sm me-2"
+                className="btn btn-white rounded-circle position-relative p-2 border shadow-sm"
+                style={{ width: "40px", height: "40px" }}
               >
-                <i className="bi bi-bell fs-5 text-dark"></i>
+                <i className="bi bi-bell text-dark"></i>
                 {unreadCount > 0 && (
                   <span
-                    className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
-                    style={{ fontSize: "0.6rem" }}
+                    className="position-absolute top-0 start-100 translate-middle badge rounded-circle bg-warning text-dark border border-white"
+                    style={{ fontSize: "0.65rem", padding: "4px 6px" }}
                   >
                     {unreadCount}
                   </span>
@@ -1069,7 +1525,7 @@ export default function MyDhobhiGhatApp() {
               {isNotificationOpen && (
                 <div
                   className="dropdown-menu show position-absolute end-0 mt-3 shadow-lg border-0 rounded-4 py-0"
-                  style={{ width: "320px", zIndex: 1050, overflow: "hidden" }}
+                  style={{ width: "300px", zIndex: 1050, overflow: "hidden" }}
                 >
                   <div className="bg-primary text-white px-4 py-3 d-flex justify-content-between align-items-center">
                     <h6 className="mb-0 fw-bold">Notifications</h6>
@@ -1090,7 +1546,10 @@ export default function MyDhobhiGhatApp() {
                         >
                           <div className="d-flex w-100 justify-content-between mb-1">
                             <h6 className="mb-0 fw-bold small text-dark">
-                              <i className="bi bi-info-circle-fill text-primary me-2"></i>
+                              <i
+                                className="bi bi-circle-fill text-primary me-2"
+                                style={{ fontSize: "8px" }}
+                              ></i>
                               Update
                             </h6>
                             <small
@@ -1116,290 +1575,394 @@ export default function MyDhobhiGhatApp() {
 
             {/* Profile Avatar */}
             <div
-              className="d-flex align-items-center gap-2 px-3 py-1 rounded-pill bg-light border cursor-pointer shadow-sm"
+              className="d-flex align-items-center gap-2 cursor-pointer ms-1 ms-md-0"
               onClick={() => setIsProfilePopupOpen(true)}
               style={{ cursor: "pointer" }}
             >
               <div
-                className="rounded-circle bg-primary text-white d-flex justify-content-center align-items-center fw-bold"
-                style={{ width: "30px", height: "30px", fontSize: "0.8rem" }}
+                className="rounded-circle bg-primary text-white d-flex justify-content-center align-items-center fw-bold shadow-sm"
+                style={{ width: "40px", height: "40px", fontSize: "1rem" }}
               >
                 {userProfile?.full_name
                   ? userProfile.full_name[0].toUpperCase()
-                  : "U"}
+                  : "T"}
               </div>
-              <span className="text-dark small fw-bold">
-                {userProfile?.full_name || "User"}
+              <span className="text-dark fw-bold d-none d-md-block ms-1">
+                {firstName}{" "}
+                <i
+                  className="bi bi-chevron-down text-muted ms-1"
+                  style={{ fontSize: "0.7rem" }}
+                ></i>
               </span>
             </div>
           </div>
         </header>
 
-        <div className="container-fluid p-4">
+        <div className="container-fluid p-3 p-md-4 flex-grow-1">
           {/* ================= DASHBOARD SECTION ================= */}
           {activeSection === "dashboard" && (
-            <div>
-              {userProfile?.role === "user" ? (
+            <div className="fade-in">
+              {/* WELCOME BANNER */}
+              <div className="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
                 <div>
-                  <div className="bg-primary text-white rounded-4 p-4 mb-4 shadow">
-                    <h2 className="fw-bold mb-1">
-                      Welcome, {userProfile?.full_name || "Customer"}!
-                    </h2>
-                    <p className="mb-0 text-white-50">
-                      Here are your active laundry orders with live tracking.
-                    </p>
-                  </div>
-                  <h4 className="fw-bold text-dark mb-3">
-                    Your Orders & Billing
-                  </h4>
-                  <div className="card border-0 shadow-sm rounded-3">
-                    <div className="card-body p-0">
-                      <div className="table-responsive">
-                        <table className="table table-hover align-middle mb-0 text-nowrap">
-                          <thead className="bg-light border-bottom">
-                            <tr
-                              className="text-muted"
-                              style={{
-                                fontSize: "0.8rem",
-                                letterSpacing: "0.5px",
-                              }}
-                            >
-                              <th className="fw-semibold py-3 ps-4">
-                                ORDER ID
-                              </th>
-                              <th className="fw-semibold py-3">DATE & TIME</th>
-                              <th className="fw-semibold py-3">DETAILS</th>
-                              <th className="fw-semibold py-3">AMOUNT</th>
-                              <th className="fw-semibold py-3 pe-4 text-end">
-                                STATUS
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {ordersList.length === 0 ? (
-                              <tr>
-                                <td
-                                  colSpan={5}
-                                  className="text-center py-5 text-muted"
-                                >
-                                  <i className="bi bi-inbox fs-3 d-block mb-2"></i>{" "}
-                                  You have no active orders.
-                                </td>
-                              </tr>
-                            ) : (
-                              ordersList.map((order: any) => (
-                                <tr
-                                  key={order.order_id}
-                                  className="border-bottom"
-                                >
-                                  <td className="ps-4 py-3 fw-bold text-dark">
-                                    #{order.order_id}
-                                  </td>
-                                  <td className="py-3 text-secondary">
-                                    {order.created_at
-                                      ? new Date(
-                                          order.created_at,
-                                        ).toLocaleString("en-IN", {
-                                          dateStyle: "medium",
-                                          timeStyle: "short",
-                                        })
-                                      : "N/A"}
-                                  </td>
-                                  <td className="py-3 text-secondary">
-                                    {order.service_type || "Laundry Service"}
-                                  </td>
-                                  <td className="py-3 fw-bold text-dark">
-                                    ₹{order.total_amount || 0}
-                                  </td>
-                                  <td className="pe-4 py-3 text-end">
-                                    <span
-                                      className={`badge border rounded-pill px-3 py-2 fw-medium ${getOrderStatusStyle(order.status)}`}
-                                    >
-                                      {order.status}
-                                    </span>
-                                  </td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
+                  <h2 className="fw-bold text-dark mb-1">
+                    Welcome back, {firstName} 👋
+                  </h2>
+                  <p className="text-secondary mb-0">
+                    Here's what's happening with your business today.
+                  </p>
+                </div>
+                <div
+                  className="d-none d-lg-flex align-items-center opacity-75"
+                  style={{ height: "80px" }}
+                >
+                  <i className="bi bi-clouds-fill text-primary fs-1 me-2"></i>
+                  <i className="bi bi-basket-fill text-warning fs-1 me-2"></i>
+                </div>
+              </div>
+
+              {/* STATS CARDS */}
+              {userProfile?.role !== "user" && (
+                <>
+                  {/* TIME-BASED STATS */}
+                  <div className="row g-3 g-md-4 mb-4">
+                    <div className="col-12 col-md-4">
+                      <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-primary premium-hover transition-all">
+                        <p className="mb-1 fw-semibold text-secondary small text-uppercase">
+                          Today's Revenue
+                        </p>
+                        <div className="d-flex align-items-center gap-2">
+                          <h3 className="fw-bold text-dark mb-0">
+                            ₹{dashboardStats.todayRev}
+                          </h3>
+                          <span className="badge bg-light text-secondary border rounded-pill small">
+                            {dashboardStats.todayOrders} Orders
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-success premium-hover transition-all">
+                        <p className="mb-1 fw-semibold text-secondary small text-uppercase">
+                          This Month
+                        </p>
+                        <div className="d-flex align-items-center gap-2">
+                          <h3 className="fw-bold text-dark mb-0">
+                            ₹{dashboardStats.monthRev}
+                          </h3>
+                          <span className="badge bg-light text-secondary border rounded-pill small">
+                            {dashboardStats.monthOrders} Orders
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-warning premium-hover transition-all">
+                        <p className="mb-1 fw-semibold text-secondary small text-uppercase">
+                          This Year
+                        </p>
+                        <div className="d-flex align-items-center gap-2">
+                          <h3 className="fw-bold text-dark mb-0">
+                            ₹{dashboardStats.yearRev}
+                          </h3>
+                          <span className="badge bg-light text-secondary border rounded-pill small">
+                            {dashboardStats.yearOrders} Orders
+                          </span>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ) : (
-                <div>
-                  <h4 className="fw-bold text-dark mb-4">Dashboard Overview</h4>
-                  <div className="row g-4 mb-4">
+
+                  {/* OVERALL LIFETIME STATS */}
+                  <div className="row g-3 g-md-4 mb-4">
                     {[
                       {
-                        title: "Total Orders",
+                        title: "Total Lifetime Orders",
                         value: dashboardStats.totalOrders,
-                        color: "#4caf50",
-                        icon: "bi-arrow-up-right",
+                        color: "primary",
+                        hex: "#0d6efd",
+                        icon: "cart3",
                       },
                       {
-                        title: "Revenue",
+                        title: "Lifetime Revenue",
                         value: `₹${dashboardStats.revenue}`,
-                        color: "#5c92e8",
-                        icon: "bi-basket",
+                        color: "success",
+                        hex: "#198754",
+                        icon: "currency-rupee",
                       },
                       {
                         title: "Pending Pickups",
                         value: dashboardStats.pendingPickups,
-                        color: "#e85c70",
-                        icon: "bi-arrow-repeat",
+                        color: "warning",
+                        hex: "#fd7e14",
+                        icon: "bag-fill",
                       },
                       {
                         title: "Delivery",
                         value: dashboardStats.delivery,
-                        color: "#f4a137",
-                        icon: "bi-truck",
+                        color: "purple",
+                        hex: "#6f42c1",
+                        icon: "truck",
                       },
                     ].map((stat, idx) => (
-                      <div className="col-xl-3 col-md-6" key={idx}>
-                        <div
-                          className="card border-0 shadow-sm rounded-4 h-100"
-                          style={{
-                            backgroundColor: stat.color,
-                            color: "white",
-                          }}
-                        >
-                          <div className="card-body d-flex justify-content-between align-items-center p-4">
+                      <div className="col-6 col-xl-3" key={idx}>
+                        <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 position-relative overflow-hidden premium-hover transition-all">
+                          <div className="d-flex align-items-center mb-3 gap-3">
                             <div
-                              className="bg-white rounded-circle d-flex justify-content-center align-items-center shadow-sm"
-                              style={{ width: "45px", height: "45px" }}
+                              className="rounded-circle d-flex justify-content-center align-items-center text-white"
+                              style={{
+                                width: "48px",
+                                height: "48px",
+                                backgroundColor: stat.hex,
+                              }}
                             >
-                              <i
-                                className={`bi ${stat.icon} fs-5`}
-                                style={{ color: stat.color }}
-                              ></i>
+                              <i className={`bi bi-${stat.icon} fs-5`}></i>
                             </div>
-                            <div className="text-end">
+                            <div>
                               <p
-                                className="mb-1 fw-medium opacity-75 text-uppercase"
+                                className="mb-0 fw-semibold text-secondary small"
                                 style={{ fontSize: "0.75rem" }}
                               >
                                 {stat.title}
                               </p>
-                              <h4 className="fw-bold mb-0">{stat.value}</h4>
+                              <h4 className="fw-bold text-dark mb-0">
+                                {stat.value}
+                              </h4>
                             </div>
                           </div>
                         </div>
                       </div>
                     ))}
                   </div>
+                </>
+              )}
 
-                  {/* ADMIN RECENT ORDERS SUMMARY */}
-                  <div className="card border-0 shadow-sm rounded-3 mt-4">
-                    <div className="card-header bg-white border-bottom p-4 d-flex justify-content-between align-items-center">
-                      <h5 className="fw-bold text-dark mb-0">
-                        Recent Live Orders
-                      </h5>
-                      <button
-                        onClick={() => setActiveSection("orders")}
-                        className="btn btn-outline-primary btn-sm px-4 py-2 fw-medium rounded-pill d-flex align-items-center gap-2"
-                      >
-                        Manage All Orders <i className="bi bi-arrow-right"></i>
-                      </button>
+              {/* RECENT LIVE ORDERS TABLE */}
+              <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                <div className="card-header bg-white border-bottom-0 p-3 p-md-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <div className="d-flex align-items-center gap-3">
+                    <div
+                      className="bg-primary rounded-circle text-white d-flex justify-content-center align-items-center shadow-sm"
+                      style={{ width: "40px", height: "40px" }}
+                    >
+                      <i className="bi bi-clipboard2-data fs-5"></i>
                     </div>
-                    <div className="card-body p-0">
-                      <div className="table-responsive">
-                        <table className="table table-hover align-middle mb-0 text-nowrap">
-                          <thead className="bg-light border-bottom">
+                    <div>
+                      <h5 className="fw-bold text-dark mb-0">
+                        {userProfile?.role === "user"
+                          ? "Your Recent Orders"
+                          : "Recent Live Orders"}
+                      </h5>
+                      <small className="text-secondary d-block mt-n1">
+                        Track all your live orders in real-time
+                      </small>
+                    </div>
+                  </div>
+                  <div className="d-flex gap-2">
+                    <button className="btn btn-light border btn-sm fw-medium rounded-3 px-3 d-none d-md-block">
+                      <i className="bi bi-funnel"></i> Filter
+                    </button>
+                    <button
+                      onClick={() => setActiveSection("orders")}
+                      className="btn btn-primary btn-sm fw-medium rounded-3 px-3"
+                    >
+                      View All Orders <i className="bi bi-arrow-right ms-1"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="card-body p-0">
+                  {ordersList.length === 0 ? (
+                    <div className="text-center py-5">
+                      <div className="mb-3">
+                        <i
+                          className="bi bi-inboxes text-primary opacity-50"
+                          style={{ fontSize: "4rem" }}
+                        ></i>
+                      </div>
+                      <h5 className="fw-bold text-dark">No Orders Found</h5>
+                      <p className="text-secondary small">
+                        There are no live orders at the moment.
+                      </p>
+                      {userProfile?.role === "user" && (
+                        <button
+                          onClick={() => setActiveSection("orders")}
+                          className="btn btn-primary rounded-3 px-4 fw-medium mt-2"
+                        >
+                          <i className="bi bi-plus-lg me-1"></i> New Order
+                        </button>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-hover align-middle mb-0 text-nowrap">
+                        <thead className="bg-light border-bottom border-top">
+                          <tr
+                            className="text-secondary"
+                            style={{
+                              fontSize: "0.75rem",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
+                            <th className="fw-bold py-3 ps-4 border-0">
+                              ORDER ID
+                            </th>
+                            <th className="fw-bold py-3 border-0">
+                              CUSTOMER INFO
+                            </th>
+                            <th className="fw-bold py-3 border-0">LOCATION</th>
+                            <th className="fw-bold py-3 border-0">AMOUNT</th>
+                            <th className="fw-bold py-3 pe-4 border-0 text-start">
+                              STATUS
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ordersList.slice(0, 5).map((order: any) => (
                             <tr
-                              className="text-muted"
-                              style={{
-                                fontSize: "0.8rem",
-                                letterSpacing: "0.5px",
-                              }}
+                              key={order.order_id}
+                              className="border-bottom border-light"
                             >
-                              <th className="fw-semibold py-3 ps-4">
-                                ORDER ID
-                              </th>
-                              <th className="fw-semibold py-3">
-                                CUSTOMER INFO
-                              </th>
-                              <th className="fw-semibold py-3">LOCATION</th>
-                              <th className="fw-semibold py-3">AMOUNT</th>
-                              <th className="fw-semibold py-3 pe-4 text-end">
-                                STATUS
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {ordersList.slice(0, 5).map((order: any) => (
-                              <tr
-                                key={order.order_id}
-                                className="border-bottom"
-                              >
-                                <td className="ps-4 py-3 fw-bold text-dark">
-                                  #{order.order_id}
-                                </td>
-                                <td className="py-3">
+                              <td className="ps-4 py-3 fw-bold text-dark">
+                                {userProfile?.role !== "user" ? (
+                                  <span
+                                    className="text-primary text-decoration-underline cursor-pointer"
+                                    style={{ cursor: "pointer" }}
+                                    onClick={() =>
+                                      setSelectedOrderDetails(order)
+                                    }
+                                  >
+                                    #{order.order_id}
+                                  </span>
+                                ) : (
+                                  `#${order.order_id}`
+                                )}
+                              </td>
+                              <td className="py-3">
+                                {userProfile?.role !== "user" ? (
+                                  <span
+                                    className="fw-semibold text-dark d-block cursor-pointer text-decoration-underline"
+                                    style={{ cursor: "pointer" }}
+                                    onClick={() =>
+                                      setSelectedCustomerProfile({
+                                        name: order.customer_name,
+                                        phone: order.customer_phone,
+                                        address: order.location,
+                                      })
+                                    }
+                                  >
+                                    {order.customer_name}
+                                  </span>
+                                ) : (
                                   <span className="fw-semibold text-dark d-block">
                                     {order.customer_name}
                                   </span>
-                                  <span className="text-muted small">
-                                    <i className="bi bi-telephone-fill me-1"></i>
-                                    {order.customer_phone}
-                                  </span>
-                                </td>
-                                <td className="py-3 text-secondary">
-                                  <i className="bi bi-geo-alt-fill text-muted me-1"></i>
-                                  {order.location}
-                                </td>
-                                <td className="py-3 fw-bold text-dark">
-                                  ₹{order.total_amount || 0}
-                                </td>
-                                <td className="pe-4 py-3 text-end">
-                                  <span
-                                    className={`badge border rounded-pill px-3 py-2 fw-medium ${getOrderStatusStyle(order.status)}`}
-                                  >
-                                    {order.status}
-                                  </span>
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
+                                )}
+                                <span className="text-secondary small">
+                                  <i className="bi bi-telephone-fill me-1 opacity-50"></i>
+                                  {order.customer_phone}
+                                </span>
+                              </td>
+                              <td className="py-3 text-secondary small">
+                                <i className="bi bi-geo-alt-fill text-muted me-1"></i>
+                                {order.location}
+                              </td>
+                              <td className="py-3 fw-bold text-dark">
+                                ₹{order.total_amount || 0}
+                              </td>
+                              <td className="pe-4 py-3 text-start">
+                                <span
+                                  className={`badge rounded-pill px-3 py-2 fw-semibold ${getOrderStatusStyle(order.status)}`}
+                                >
+                                  {order.status}
+                                </span>
+                                {order.status === "Rejected" &&
+                                  order.rejection_reason && (
+                                    <div
+                                      className="text-danger mt-1 fw-medium"
+                                      style={{
+                                        fontSize: "0.65rem",
+                                        whiteSpace: "normal",
+                                        maxWidth: "200px",
+                                        lineHeight: "1.2",
+                                      }}
+                                    >
+                                      <i className="bi bi-info-circle-fill me-1"></i>
+                                      {order.rejection_reason}
+                                    </div>
+                                  )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  </div>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
           {/* ================= ORDERS / BOOKING SECTION ================= */}
           {activeSection === "orders" && (
-            <div>
+            <div className="fade-in">
               {userProfile?.role === "user" ? (
-                /* CUSTOMER CLOTH CATALOG & CART CHECKOUT */
-                <div>
-                  <h4 className="fw-bold text-dark mb-4">
-                    Book a Laundry Service
-                  </h4>
+                /* CUSTOMER CLOTH CATALOG & CART CHECKOUT - PREMIUM UI */
+                <div className="fade-in">
+                  <div className="mb-4">
+                    <h4 className="fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                      Book a Laundry Service{" "}
+                      <i className="bi bi-stars text-warning fs-5"></i>
+                    </h4>
+                    <p className="text-secondary small">
+                      Select your garments and we'll take care of the rest.
+                    </p>
+                  </div>
+
                   <div className="row g-4">
                     {/* Left Side: Cloth Catalog */}
                     <div className="col-lg-7">
                       <div className="row g-3">
                         {clothCatalog.map((cloth) => (
-                          <div className="col-md-6" key={cloth.id}>
-                            <div className="card border-0 shadow-sm rounded-4 p-3 h-100 d-flex flex-row justify-content-between align-items-center bg-white">
-                              <div>
-                                <h6 className="fw-bold mb-1 text-dark">
-                                  {cloth.name}
-                                </h6>
-                                <p className="text-primary fw-semibold mb-0">
-                                  ₹{cloth.price} / pc
-                                </p>
+                          <div className="col-sm-6" key={cloth.id}>
+                            <div
+                              className="card border border-light shadow-sm rounded-4 p-3 h-100 d-flex flex-row justify-content-between align-items-center bg-white premium-hover cursor-pointer"
+                              style={{ transition: "all 0.3s ease" }}
+                            >
+                              <div className="d-flex align-items-center gap-3">
+                                <div
+                                  className="bg-primary bg-opacity-10 text-primary rounded-circle d-flex justify-content-center align-items-center"
+                                  style={{ width: "45px", height: "45px" }}
+                                >
+                                  <i
+                                    className={`bi ${cloth.name.toLowerCase().includes("shirt") ? "bi-file-person" : cloth.name.toLowerCase().includes("bed") ? "bi-layout-text-window" : "bi-tag"} fs-5`}
+                                  ></i>
+                                </div>
+                                <div>
+                                  <h6
+                                    className="fw-bold mb-1 text-dark"
+                                    style={{ fontSize: "0.9rem" }}
+                                  >
+                                    {cloth.name}
+                                  </h6>
+                                  <p className="text-primary fw-bold mb-0 small">
+                                    ₹{cloth.price}{" "}
+                                    <span
+                                      className="text-muted fw-normal"
+                                      style={{ fontSize: "0.7rem" }}
+                                    >
+                                      / pc
+                                    </span>
+                                  </p>
+                                </div>
                               </div>
                               <button
                                 onClick={() => addToCart(cloth)}
-                                className="btn btn-primary btn-sm rounded-pill px-3 fw-medium"
+                                className="btn btn-light text-primary btn-sm rounded-circle shadow-sm d-flex justify-content-center align-items-center add-btn-hover"
+                                style={{ width: "35px", height: "35px" }}
+                                title="Add to Cart"
                               >
-                                <i className="bi bi-plus"></i> Add
+                                <i className="bi bi-plus-lg fw-bold"></i>
                               </button>
                             </div>
                           </div>
@@ -1409,85 +1972,157 @@ export default function MyDhobhiGhatApp() {
 
                     {/* Right Side: Cart Summary & Checkout */}
                     <div className="col-lg-5">
-                      <div className="card border-0 shadow-sm rounded-4 p-4 bg-white">
-                        <h5 className="fw-bold text-dark mb-3">
-                          Your Order Cart
-                        </h5>
+                      <div className="card border-0 shadow-lg rounded-4 p-4 bg-white position-relative overflow-hidden cart-card-premium">
+                        <div
+                          className="position-absolute top-0 end-0 bg-primary opacity-10 rounded-circle blur-effect"
+                          style={{
+                            width: "150px",
+                            height: "150px",
+                            marginRight: "-50px",
+                            marginTop: "-50px",
+                            filter: "blur(40px)",
+                          }}
+                        ></div>
+
+                        <div className="d-flex justify-content-between align-items-center mb-4 position-relative z-1">
+                          <h5 className="fw-bold text-dark mb-0">
+                            Order Summary
+                          </h5>
+                          <span className="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3 py-2 fw-bold">
+                            {cart.length} Items
+                          </span>
+                        </div>
+
                         {cart.length === 0 ? (
-                          <p className="text-muted small py-4 text-center">
-                            Your cart is empty. Select items from the catalog.
-                          </p>
-                        ) : (
-                          <div>
+                          <div className="text-center py-5 position-relative z-1">
                             <div
-                              className="d-flex flex-column gap-3 mb-4"
-                              style={{ maxHeight: "250px", overflowY: "auto" }}
+                              className="bg-light rounded-circle d-flex justify-content-center align-items-center mx-auto mb-3"
+                              style={{ width: "80px", height: "80px" }}
+                            >
+                              <i
+                                className="bi bi-basket2 text-muted opacity-50"
+                                style={{ fontSize: "2.5rem" }}
+                              ></i>
+                            </div>
+                            <h6 className="fw-bold text-dark">
+                              Your cart is empty
+                            </h6>
+                            <p className="text-muted small mb-0">
+                              Select items from the catalog to get started.
+                            </p>
+                          </div>
+                        ) : (
+                          <div className="position-relative z-1">
+                            <div
+                              className="d-flex flex-column gap-3 mb-4 pe-2 custom-scrollbar"
+                              style={{
+                                maxHeight: "250px",
+                                overflowY: "auto",
+                                overflowX: "hidden",
+                              }}
                             >
                               {cart.map((item: any) => (
                                 <div
                                   key={item.id}
-                                  className="d-flex justify-content-between align-items-center border-bottom pb-2"
+                                  className="d-flex justify-content-between align-items-center p-3 border border-light rounded-3 bg-light bg-opacity-50 cart-item-anim shadow-sm"
                                 >
-                                  <div>
-                                    <h6 className="mb-0 fw-semibold text-dark">
+                                  <div className="d-flex flex-column">
+                                    <h6
+                                      className="mb-1 fw-bold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
                                       {item.name}
                                     </h6>
-                                    <small className="text-muted">
-                                      ₹{item.price} x {item.qty}
+                                    <small className="text-secondary fw-medium">
+                                      ₹{item.price}{" "}
+                                      <span className="mx-1">x</span> {item.qty}
                                     </small>
                                   </div>
-                                  <div className="d-flex align-items-center gap-2">
-                                    <span className="fw-bold text-dark">
+                                  <div className="d-flex align-items-center gap-3">
+                                    <span className="fw-bold text-dark fs-6">
                                       ₹{item.price * item.qty}
                                     </span>
                                     <button
                                       onClick={() => removeFromCart(item.id)}
-                                      className="btn btn-sm text-danger p-0"
+                                      className="btn btn-sm btn-white text-danger border shadow-sm rounded-circle d-flex justify-content-center align-items-center"
+                                      style={{ width: "28px", height: "28px" }}
                                     >
-                                      <i className="bi bi-trash"></i>
+                                      <i
+                                        className="bi bi-trash3-fill"
+                                        style={{ fontSize: "0.7rem" }}
+                                      ></i>
                                     </button>
                                   </div>
                                 </div>
                               ))}
                             </div>
 
-                            <div className="border-top pt-3 mb-4">
-                              <div className="d-flex justify-content-between align-items-center mb-2">
-                                <span className="text-muted">Total Amount</span>
-                                <h4 className="fw-bold text-dark mb-0">
+                            <div className="border-top border-dashed pt-3 mb-4">
+                              <div className="d-flex justify-content-between align-items-center mb-1">
+                                <span className="text-secondary fw-medium small">
+                                  Subtotal
+                                </span>
+                                <span className="text-dark fw-bold">
+                                  ₹{calculateCartTotal()}
+                                </span>
+                              </div>
+                              <div className="d-flex justify-content-between align-items-center mb-3">
+                                <span className="text-secondary fw-medium small">
+                                  Delivery Fee
+                                </span>
+                                <span className="text-success fw-bold small">
+                                  Free
+                                </span>
+                              </div>
+                              <div className="d-flex justify-content-between align-items-center p-3 bg-primary bg-opacity-10 rounded-3">
+                                <span className="text-primary fw-bold">
+                                  Total Amount
+                                </span>
+                                <h4 className="fw-bold text-primary mb-0">
                                   ₹{calculateCartTotal()}
                                 </h4>
                               </div>
                             </div>
 
-                            {/* Payment Options */}
-                            <h6 className="fw-semibold text-dark mb-2">
-                              Select Payment Method
+                            <h6
+                              className="fw-bold text-dark mb-3"
+                              style={{ fontSize: "0.85rem" }}
+                            >
+                              Payment Method
                             </h6>
                             <div className="d-flex flex-column gap-2 mb-4">
-                              <div className="form-check border rounded-3 p-3 cursor-pointer">
-                                <input
-                                  className="form-check-input"
-                                  type="radio"
-                                  name="payment"
-                                  id="cod"
-                                  checked={paymentMethod === "Cod"}
-                                  onChange={() => setPaymentMethod("Cod")}
-                                />
-                                <label
-                                  className="form-check-label fw-medium text-dark ms-2"
-                                  htmlFor="cod"
+                              <div
+                                className={`payment-card d-flex align-items-center p-3 rounded-3 cursor-pointer ${paymentMethod === "Cod" ? "active shadow-sm" : "border border-light bg-light opacity-75"}`}
+                                onClick={() => setPaymentMethod("Cod")}
+                              >
+                                <div
+                                  className={`rounded-circle d-flex justify-content-center align-items-center me-3 ${paymentMethod === "Cod" ? "bg-primary text-white" : "bg-white border text-muted"}`}
+                                  style={{ width: "20px", height: "20px" }}
                                 >
-                                  Pay on Delivery
-                                </label>
+                                  {paymentMethod === "Cod" && (
+                                    <i
+                                      className="bi bi-check"
+                                      style={{ fontSize: "12px" }}
+                                    ></i>
+                                  )}
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <i className="bi bi-cash-coin fs-5 text-success"></i>
+                                  <span
+                                    className={`fw-bold ${paymentMethod === "Cod" ? "text-dark" : "text-secondary"}`}
+                                  >
+                                    Pay on Delivery
+                                  </span>
+                                </div>
                               </div>
                             </div>
 
                             <button
                               onClick={handleCheckout}
-                              className="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm"
+                              className="btn btn-gradient w-100 fw-bold py-3 rounded-pill text-white shadow-lg d-flex justify-content-center align-items-center gap-2"
                             >
-                              Place Order Now
+                              <span>Place Order Now</span>{" "}
+                              <i className="bi bi-arrow-right-circle-fill fs-5"></i>
                             </button>
                           </div>
                         )}
@@ -1499,32 +2134,32 @@ export default function MyDhobhiGhatApp() {
                 /* ADMIN / MANAGER ORDER MANAGEMENT VIEW */
                 <div>
                   <div className="d-flex justify-content-between align-items-center mb-4">
-                    <h4 className="fw-bold text-dark mb-0">
-                      Order Management & Status Control
-                    </h4>
+                    <h4 className="fw-bold text-dark mb-0">Order Management</h4>
                   </div>
-                  <div className="card border-0 shadow-sm rounded-3">
+                  <div className="card border-0 shadow-sm rounded-4 bg-white">
                     <div className="card-body p-0">
                       <div className="table-responsive">
                         <table className="table table-hover align-middle mb-0 text-nowrap">
                           <thead className="bg-light border-bottom">
                             <tr
-                              className="text-muted"
+                              className="text-secondary"
                               style={{
-                                fontSize: "0.8rem",
+                                fontSize: "0.75rem",
                                 letterSpacing: "0.5px",
                               }}
                             >
-                              <th className="fw-semibold py-3 ps-4">
+                              <th className="fw-bold py-3 ps-4 border-0">
                                 ORDER ID
                               </th>
-                              <th className="fw-semibold py-3">DATE & TIME</th>
-                              <th className="fw-semibold py-3">
+                              <th className="fw-bold py-3 border-0">
+                                DATE & TIME
+                              </th>
+                              <th className="fw-bold py-3 border-0">
                                 CUSTOMER INFO
                               </th>
-                              <th className="fw-semibold py-3">AMOUNT</th>
-                              <th className="fw-semibold py-3">STATUS</th>
-                              <th className="fw-semibold py-3 pe-4 text-end">
+                              <th className="fw-bold py-3 border-0">AMOUNT</th>
+                              <th className="fw-bold py-3 border-0">STATUS</th>
+                              <th className="fw-bold py-3 pe-4 border-0 text-end">
                                 UPDATE STATUS
                               </th>
                             </tr>
@@ -1544,12 +2179,20 @@ export default function MyDhobhiGhatApp() {
                               ordersList.map((order: any) => (
                                 <tr
                                   key={order.order_id}
-                                  className="border-bottom"
+                                  className="border-bottom border-light"
                                 >
                                   <td className="ps-4 py-3 fw-bold text-dark">
-                                    #{order.order_id}
+                                    <span
+                                      className="text-primary text-decoration-underline cursor-pointer"
+                                      style={{ cursor: "pointer" }}
+                                      onClick={() =>
+                                        setSelectedOrderDetails(order)
+                                      }
+                                    >
+                                      #{order.order_id}
+                                    </span>
                                   </td>
-                                  <td className="py-3 text-secondary">
+                                  <td className="py-3 text-secondary small">
                                     {order.created_at
                                       ? new Date(
                                           order.created_at,
@@ -1560,11 +2203,21 @@ export default function MyDhobhiGhatApp() {
                                       : "N/A"}
                                   </td>
                                   <td className="py-3">
-                                    <span className="fw-semibold text-dark d-block">
+                                    <span
+                                      className="fw-semibold text-dark d-block cursor-pointer text-decoration-underline"
+                                      style={{ cursor: "pointer" }}
+                                      onClick={() =>
+                                        setSelectedCustomerProfile({
+                                          name: order.customer_name,
+                                          phone: order.customer_phone,
+                                          address: order.location,
+                                        })
+                                      }
+                                    >
                                       {order.customer_name}
                                     </span>
-                                    <span className="text-muted small">
-                                      <i className="bi bi-telephone-fill me-1"></i>
+                                    <span className="text-secondary small">
+                                      <i className="bi bi-telephone-fill me-1 opacity-50"></i>
                                       {order.customer_phone}
                                     </span>
                                   </td>
@@ -1573,14 +2226,29 @@ export default function MyDhobhiGhatApp() {
                                   </td>
                                   <td className="py-3">
                                     <span
-                                      className={`badge border rounded-pill px-3 py-2 fw-medium ${getOrderStatusStyle(order.status)}`}
+                                      className={`badge rounded-pill px-3 py-2 fw-semibold ${getOrderStatusStyle(order.status)}`}
                                     >
                                       {order.status}
                                     </span>
+                                    {order.status === "Rejected" &&
+                                      order.rejection_reason && (
+                                        <div
+                                          className="text-danger mt-1 fw-medium"
+                                          style={{
+                                            fontSize: "0.65rem",
+                                            whiteSpace: "normal",
+                                            maxWidth: "200px",
+                                            lineHeight: "1.2",
+                                          }}
+                                        >
+                                          <i className="bi bi-info-circle-fill me-1"></i>
+                                          {order.rejection_reason}
+                                        </div>
+                                      )}
                                   </td>
                                   <td className="pe-4 py-3 text-end">
                                     <select
-                                      className="form-select form-select-sm d-inline-block w-auto border-light bg-light text-secondary shadow-none cursor-pointer"
+                                      className="form-select form-select-sm d-inline-block w-auto border rounded-3 bg-white text-secondary shadow-none cursor-pointer"
                                       value={order.status}
                                       onChange={(e: any) =>
                                         handleOrderStatusUpdate(
@@ -1598,6 +2266,7 @@ export default function MyDhobhiGhatApp() {
                                       <option value="Out for Delivery">
                                         Out for Delivery
                                       </option>
+                                      <option value="Rejected">Rejected</option>
                                     </select>
                                   </td>
                                 </tr>
@@ -1615,40 +2284,47 @@ export default function MyDhobhiGhatApp() {
 
           {/* ================= PAYROLL SECTION ================= */}
           {activeSection === "payroll" && userProfile?.role === "admin" && (
-            <div>
-              <div className="d-flex justify-content-between align-items-center mb-4">
+            <div className="fade-in">
+              <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <h4 className="fw-bold text-dark mb-0">Payroll Management</h4>
                 <button
                   onClick={() => setIsAddStaffModalOpen(true)}
-                  className="btn btn-primary btn-sm px-4 py-2 fw-medium shadow-sm d-flex align-items-center gap-2"
+                  className="btn btn-primary btn-sm px-4 py-2 fw-medium rounded-3 shadow-sm d-flex align-items-center gap-2"
                 >
                   <i className="bi bi-person-plus-fill"></i> Add Staff
                 </button>
               </div>
-              <div className="card border-0 shadow-sm rounded-3">
+              <div className="card border-0 shadow-sm rounded-4 bg-white">
                 <div className="card-body p-0">
                   <div className="table-responsive">
                     <table className="table table-hover align-middle mb-0 text-nowrap">
                       <thead className="bg-light border-bottom">
                         <tr
-                          className="text-muted"
-                          style={{ fontSize: "0.8rem", letterSpacing: "0.5px" }}
+                          className="text-secondary"
+                          style={{
+                            fontSize: "0.75rem",
+                            letterSpacing: "0.5px",
+                          }}
                         >
-                          <th className="fw-semibold py-3 ps-4">STAFF NAME</th>
-                          <th className="fw-semibold py-3">DESIGNATION</th>
-                          <th className="fw-semibold py-3">
+                          <th className="fw-bold py-3 ps-4 border-0">
+                            STAFF NAME
+                          </th>
+                          <th className="fw-bold py-3 border-0">DESIGNATION</th>
+                          <th className="fw-bold py-3 border-0">
                             SALARY{" "}
                             <button
                               onClick={handleUnlockSalary}
                               className="btn btn-link text-muted p-0 ms-2 text-decoration-none border-0"
                             >
                               <i
-                                className={`bi ${isSalaryVisible ? "bi-unlock-fill" : "bi-lock-fill"}`}
+                                className={`bi ${isSalaryVisible ? "bi-unlock-fill text-primary" : "bi-lock-fill"}`}
                               ></i>
                             </button>
                           </th>
-                          <th className="fw-semibold py-3">PAYMENT STATUS</th>
-                          <th className="fw-semibold py-3 pe-4 text-end">
+                          <th className="fw-bold py-3 border-0">
+                            PAYMENT STATUS
+                          </th>
+                          <th className="fw-bold py-3 pe-4 border-0 text-end">
                             ACTIONS
                           </th>
                         </tr>
@@ -1660,34 +2336,37 @@ export default function MyDhobhiGhatApp() {
                               colSpan={5}
                               className="text-center py-5 text-muted"
                             >
-                              <i className="bi bi-wallet2 fs-3 d-block mb-2"></i>{" "}
-                              No payroll records found.
+                              <i className="bi bi-people fs-3 d-block mb-2"></i>{" "}
+                              No staff records found.
                             </td>
                           </tr>
                         ) : (
                           payrollList.map((staff: any) => (
-                            <tr key={staff.staff_id} className="border-bottom">
+                            <tr
+                              key={staff.staff_id}
+                              className="border-bottom border-light"
+                            >
                               <td className="ps-4 py-3 fw-bold text-dark">
                                 {staff.staff_name}
                               </td>
                               <td className="py-3 text-secondary">
                                 {staff.designation}
                               </td>
-                              <td className="py-3 fw-medium text-dark">
+                              <td className="py-3 fw-bold text-dark">
                                 {isSalaryVisible
                                   ? `₹${staff.monthly_salary}`
                                   : "₹ * * * *"}
                               </td>
                               <td className="py-3">
                                 <span
-                                  className={`badge border rounded-pill px-3 py-2 fw-medium ${getPayrollStatusStyle(staff.status)}`}
+                                  className={`badge rounded-pill px-3 py-2 fw-semibold ${getPayrollStatusStyle(staff.status)}`}
                                 >
                                   {staff.status}
                                 </span>
                               </td>
                               <td className="pe-4 py-3 text-end d-flex align-items-center justify-content-end gap-2">
                                 <select
-                                  className="form-select form-select-sm d-inline-block w-auto border-light bg-light text-secondary shadow-none cursor-pointer"
+                                  className="form-select form-select-sm d-inline-block w-auto border rounded-3 bg-white text-secondary shadow-none cursor-pointer"
                                   defaultValue={staff.status}
                                 >
                                   <option value="Pending">Pending</option>
@@ -1703,10 +2382,10 @@ export default function MyDhobhiGhatApp() {
                                         staff.staff_name,
                                       )
                                     }
-                                    className="btn btn-sm btn-outline-primary py-1 px-2 border-0"
+                                    className="btn btn-sm btn-light border rounded-3 py-1 px-2"
                                     title="Edit Salary"
                                   >
-                                    <i className="bi bi-pencil-square"></i>
+                                    <i className="bi bi-pencil-square text-primary"></i>
                                   </button>
                                 )}
                               </td>
@@ -1723,12 +2402,12 @@ export default function MyDhobhiGhatApp() {
 
           {/* ================= REPORTS SECTION ================= */}
           {activeSection === "reports" && userProfile?.role !== "user" && (
-            <div>
-              <div className="d-flex justify-content-between align-items-center mb-4">
+            <div className="fade-in">
+              <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                 <h4 className="fw-bold text-dark mb-0">Financial Reports</h4>
                 <button
                   onClick={handleExportPDF}
-                  className="btn btn-outline-primary btn-sm px-4 py-2 fw-medium bg-white shadow-sm d-flex align-items-center gap-2"
+                  className="btn btn-outline-primary btn-sm px-4 py-2 fw-medium rounded-3 bg-white shadow-sm d-flex align-items-center gap-2"
                 >
                   <i className="bi bi-download"></i> Export PDF
                 </button>
@@ -1736,15 +2415,15 @@ export default function MyDhobhiGhatApp() {
 
               <div className="row g-4 mb-4">
                 <div className="col-md-6">
-                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4 d-flex flex-row align-items-center justify-content-between">
+                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4 d-flex flex-row align-items-center justify-content-between premium-hover transition-all">
                     <div>
                       <h6
-                        className="text-muted fw-semibold mb-1 text-uppercase"
+                        className="text-secondary fw-semibold mb-1 text-uppercase"
                         style={{ fontSize: "0.8rem" }}
                       >
                         Total Revenue
                       </h6>
-                      <h3 className="fw-bold text-success mb-0 d-flex align-items-center gap-2">
+                      <h3 className="fw-bold text-success mb-0">
                         ₹{dashboardStats.revenue}
                       </h3>
                     </div>
@@ -1757,15 +2436,15 @@ export default function MyDhobhiGhatApp() {
                   </div>
                 </div>
                 <div className="col-md-6">
-                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4 d-flex flex-row align-items-center justify-content-between">
+                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4 d-flex flex-row align-items-center justify-content-between premium-hover transition-all">
                     <div>
                       <h6
-                        className="text-muted fw-semibold mb-1 text-uppercase"
+                        className="text-secondary fw-semibold mb-1 text-uppercase"
                         style={{ fontSize: "0.8rem" }}
                       >
                         Total Expenses
                       </h6>
-                      <h3 className="fw-bold text-danger mb-0 d-flex align-items-center gap-2">
+                      <h3 className="fw-bold text-danger mb-0">
                         ₹{dashboardStats.totalExpenses}
                       </h3>
                     </div>
@@ -1779,12 +2458,12 @@ export default function MyDhobhiGhatApp() {
                 </div>
               </div>
 
-              <div className="card border-0 shadow-sm rounded-3">
-                <div className="card-header bg-white border-bottom p-4 d-flex justify-content-between align-items-center">
+              <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                <div className="card-header bg-white border-bottom p-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
                   <h5 className="fw-bold text-dark mb-0">Expense Ledger</h5>
                   <button
                     onClick={() => setIsAddExpenseModalOpen(true)}
-                    className="btn btn-primary btn-sm px-3 fw-medium"
+                    className="btn btn-primary btn-sm px-3 fw-medium rounded-3"
                   >
                     <i className="bi bi-plus-lg me-1"></i> Add Expense
                   </button>
@@ -1794,13 +2473,16 @@ export default function MyDhobhiGhatApp() {
                     <table className="table table-hover align-middle mb-0 text-nowrap">
                       <thead className="bg-light border-bottom">
                         <tr
-                          className="text-muted"
-                          style={{ fontSize: "0.8rem", letterSpacing: "0.5px" }}
+                          className="text-secondary"
+                          style={{
+                            fontSize: "0.75rem",
+                            letterSpacing: "0.5px",
+                          }}
                         >
-                          <th className="fw-semibold py-3 ps-4">DATE</th>
-                          <th className="fw-semibold py-3">CATEGORY</th>
-                          <th className="fw-semibold py-3">DESCRIPTION</th>
-                          <th className="fw-semibold py-3 pe-4 text-end">
+                          <th className="fw-bold py-3 ps-4 border-0">DATE</th>
+                          <th className="fw-bold py-3 border-0">CATEGORY</th>
+                          <th className="fw-bold py-3 border-0">DESCRIPTION</th>
+                          <th className="fw-bold py-3 pe-4 border-0 text-end">
                             AMOUNT
                           </th>
                         </tr>
@@ -1820,14 +2502,16 @@ export default function MyDhobhiGhatApp() {
                           reportsList.map((expense: any) => (
                             <tr
                               key={expense.expense_id}
-                              className="border-bottom"
+                              className="border-bottom border-light"
                             >
-                              <td className="ps-4 py-3 fw-bold text-dark">
+                              <td className="ps-4 py-3 fw-semibold text-dark small">
                                 {new Date(
                                   expense.created_at ||
                                     expense.expense_date ||
                                     Date.now(),
-                                ).toLocaleDateString()}
+                                ).toLocaleDateString("en-IN", {
+                                  dateStyle: "medium",
+                                })}
                               </td>
                               <td className="py-3 text-secondary">
                                 {expense.category}
@@ -1850,6 +2534,68 @@ export default function MyDhobhiGhatApp() {
           )}
         </div>
       </main>
+
+      {/* Global CSS Inject for Premium Animations */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .fade-in { animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .hover-bg-dark:hover { background-color: rgba(255,255,255,0.05) !important; color: white !important; }
+        body { background-color: #F8F9FB; }
+        
+        /* Premium UI Enhancements */
+        .premium-hover:hover {
+          transform: translateY(-5px);
+          box-shadow: 0 15px 30px rgba(13, 110, 253, 0.12) !important;
+          border-color: rgba(13, 110, 253, 0.3) !important;
+        }
+        .add-btn-hover { transition: all 0.2s ease; }
+        .premium-hover:hover .add-btn-hover {
+          background-color: #0d6efd !important;
+          color: white !important;
+          transform: scale(1.1);
+        }
+
+        .cart-card-premium {
+          border-top: 4px solid #0d6efd !important;
+        }
+        
+        .cart-item-anim {
+          animation: slideInRight 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+        }
+        @keyframes slideInRight {
+          from { opacity: 0; transform: translateX(30px); }
+          to { opacity: 1; transform: translateX(0); }
+        }
+
+        .border-dashed { border-top-style: dashed !important; border-top-width: 2px !important; border-color: #dee2e6 !important; }
+
+        .payment-card { transition: all 0.2s ease; border: 2px solid transparent; }
+        .payment-card.active { border-color: #0d6efd; background-color: rgba(13, 110, 253, 0.05) !important; }
+        .payment-card:hover:not(.active) { background-color: #f8f9fa !important; border-color: #dee2e6; }
+
+        .btn-gradient {
+          background: linear-gradient(135deg, #0d6efd, #6f42c1);
+          border: none;
+          background-size: 200% auto;
+          transition: all 0.4s ease;
+        }
+        .btn-gradient:hover {
+          background-position: right center;
+          box-shadow: 0 10px 25px rgba(111, 66, 193, 0.4) !important;
+          transform: translateY(-2px);
+        }
+
+        /* Custom Scrollbar for Cart */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ced4da; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #adb5bd; }
+      `,
+        }}
+      />
     </div>
   );
 }
