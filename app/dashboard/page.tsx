@@ -4,45 +4,47 @@ import Swal from "sweetalert2";
 import { supabase } from "../lib/supabaseClient";
 
 export default function MyDhobhiGhatApp() {
-  const [activeSection, setActiveSection] = useState("dashboard");
+  const [activeSection, setActiveSection] = useState<string>("dashboard");
 
   // UI States
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  const [isProfilePopupOpen, setIsProfilePopupOpen] = useState(false);
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
-  const [currentTime, setCurrentTime] = useState(null);
-  const [currentUser, setCurrentUser] = useState(null);
-  const [userProfile, setUserProfile] = useState(null);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isProfilePopupOpen, setIsProfilePopupOpen] = useState<boolean>(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState<boolean>(false);
+  const [currentTime, setCurrentTime] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
 
   // Notifications State
-  const [notifications, setNotifications] = useState([]);
+  const [notifications, setNotifications] = useState<any[]>([]);
 
   // Modal States
-  const [isOnboardingOpen, setIsOnboardingOpen] = useState(false);
-  const [isSalaryVisible, setIsSalaryVisible] = useState(false);
-  const [isAddStaffModalOpen, setIsAddStaffModalOpen] = useState(false);
-  const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] = useState(false);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [isSalaryVisible, setIsSalaryVisible] = useState<boolean>(false);
+  const [isAddStaffModalOpen, setIsAddStaffModalOpen] =
+    useState<boolean>(false);
+  const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] =
+    useState<boolean>(false);
 
   // Form States
-  const [onboardingData, setOnboardingData] = useState({
+  const [onboardingData, setOnboardingData] = useState<any>({
     name: "",
     phone: "",
     address: "",
   });
-  const [newStaff, setNewStaff] = useState({
+  const [newStaff, setNewStaff] = useState<any>({
     name: "",
     designation: "",
     salary: "",
   });
-  const [newExpense, setNewExpense] = useState({
+  const [newExpense, setNewExpense] = useState<any>({
     category: "",
     description: "",
     amount: "",
   });
 
   // Customer Cart State
-  const [cart, setCart] = useState([]);
-  const [paymentMethod, setPaymentMethod] = useState("Cod");
+  const [cart, setCart] = useState<any[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState<string>("Cod");
 
   const clothCatalog = [
     { id: 1, name: "Shirt / T-Shirt", price: 25 },
@@ -52,21 +54,23 @@ export default function MyDhobhiGhatApp() {
     { id: 5, name: "Saree / Traditional", price: 80 },
   ];
 
-  const [dashboardStats, setDashboardStats] = useState({
+  const [dashboardStats, setDashboardStats] = useState<any>({
     totalOrders: 0,
     revenue: 0,
     pendingPickups: 0,
     delivery: 0,
     totalExpenses: 0,
   });
-  const [ordersList, setOrdersList] = useState([]);
-  const [payrollList, setPayrollList] = useState([]);
-  const [reportsList, setReportsList] = useState([]);
+  const [ordersList, setOrdersList] = useState<any[]>([]);
+  const [payrollList, setPayrollList] = useState<any[]>([]);
+  const [reportsList, setReportsList] = useState<any[]>([]);
 
   // ================= BROWSER AUDIO UNLOCKER =================
   useEffect(() => {
     const unlockAudio = () => {
-      const audioEl = document.getElementById("notificationSound");
+      const audioEl = document.getElementById(
+        "notificationSound",
+      ) as HTMLAudioElement;
       if (audioEl) {
         audioEl
           .play()
@@ -74,7 +78,7 @@ export default function MyDhobhiGhatApp() {
             audioEl.pause();
             audioEl.currentTime = 0;
           })
-          .catch((err) =>
+          .catch((err: any) =>
             console.log("Audio unlock waiting for interaction...", err),
           );
       }
@@ -157,10 +161,13 @@ export default function MyDhobhiGhatApp() {
         if (expenses) {
           setReportsList(expenses);
           const totalExp = expenses.reduce(
-            (sum, exp) => sum + parseFloat(exp.amount),
+            (sum: any, exp: any) => sum + parseFloat(exp.amount),
             0,
           );
-          setDashboardStats((prev) => ({ ...prev, totalExpenses: totalExp }));
+          setDashboardStats((prev: any) => ({
+            ...prev,
+            totalExpenses: totalExp,
+          }));
         }
       }
     };
@@ -168,40 +175,38 @@ export default function MyDhobhiGhatApp() {
     initApp();
   }, []);
 
-  const updateDashboardStats = (orders) => {
+  const updateDashboardStats = (orders: any[]) => {
     const totalRev = orders.reduce(
-      (sum, o) => sum + (parseFloat(o.total_amount) || 0),
+      (sum: any, o: any) => sum + (parseFloat(o.total_amount) || 0),
       0,
     );
-    setDashboardStats((prev) => ({
+    setDashboardStats((prev: any) => ({
       ...prev,
       totalOrders: orders.length,
       revenue: totalRev,
       pendingPickups: orders.filter(
-        (o) => o.status === "Pickup" || o.status === "Received",
+        (o: any) => o.status === "Pickup" || o.status === "Received",
       ).length,
-      delivery: orders.filter((o) => o.status === "Out for Delivery").length,
+      delivery: orders.filter((o: any) => o.status === "Out for Delivery")
+        .length,
     }));
   };
 
   // SOUND EFFECT FUNCTION
   const playNotificationSound = () => {
-    const audioEl = document.getElementById("notificationSound");
+    const audioEl = document.getElementById(
+      "notificationSound",
+    ) as HTMLAudioElement;
     if (audioEl) {
       audioEl.currentTime = 0;
       audioEl
         .play()
-        .catch((err) =>
-          console.log(
-            "Sound blocked by browser. Click anywhere on the dashboard first!",
-            err,
-          ),
-        );
+        .catch((err: any) => console.log("Sound blocked by browser.", err));
     }
   };
 
-  const addNotification = (message) => {
-    setNotifications((prev) => [
+  const addNotification = (message: string) => {
+    setNotifications((prev: any[]) => [
       {
         id: Date.now(),
         message,
@@ -224,8 +229,8 @@ export default function MyDhobhiGhatApp() {
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "laundry_orders" },
-        (payload) => {
-          setOrdersList((prev) => [payload.new, ...prev]);
+        (payload: any) => {
+          setOrdersList((prev: any[]) => [payload.new, ...prev]);
 
           // ADMIN / MANAGER ALERTS
           if (userProfile.role === "admin" || userProfile.role === "manager") {
@@ -267,8 +272,8 @@ export default function MyDhobhiGhatApp() {
       .on(
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "laundry_orders" },
-        (payload) => {
-          setOrdersList((prev) =>
+        (payload: any) => {
+          setOrdersList((prev: any[]) =>
             prev.map((o) =>
               o.order_id === payload.new.order_id ? payload.new : o,
             ),
@@ -325,7 +330,7 @@ export default function MyDhobhiGhatApp() {
       showCancelButton: true,
       confirmButtonText: "Unlock",
       confirmButtonColor: "#4caf50",
-    }).then((result) => {
+    }).then((result: any) => {
       if (result.isConfirmed && result.value === "123456") {
         setIsSalaryVisible(true);
         Swal.fire({
@@ -344,14 +349,18 @@ export default function MyDhobhiGhatApp() {
     });
   };
 
-  const handleUpdateSalary = async (staffId, currentSalary, staffName) => {
+  const handleUpdateSalary = async (
+    staffId: any,
+    currentSalary: any,
+    staffName: any,
+  ) => {
     const { value: newSalary } = await Swal.fire({
       title: `Update Salary for ${staffName}`,
       input: "number",
       inputValue: currentSalary,
       showCancelButton: true,
       confirmButtonText: "Save Salary",
-      inputValidator: (value) => {
+      inputValidator: (value: any) => {
         if (!value) return "Please enter a valid amount!";
       },
     });
@@ -364,8 +373,8 @@ export default function MyDhobhiGhatApp() {
       if (error) {
         Swal.fire("Database Error", error.message, "error");
       } else {
-        setPayrollList(
-          payrollList.map((s) =>
+        setPayrollList((prev: any[]) =>
+          prev.map((s) =>
             s.staff_id === staffId ? { ...s, monthly_salary: newSalary } : s,
           ),
         );
@@ -379,7 +388,7 @@ export default function MyDhobhiGhatApp() {
     }
   };
 
-  const handleOnboardingSubmit = async (e) => {
+  const handleOnboardingSubmit = async (e: any) => {
     e.preventDefault();
     if (!currentUser) return;
     const { error } = await supabase
@@ -393,7 +402,7 @@ export default function MyDhobhiGhatApp() {
       .eq("id", currentUser.id);
 
     if (!error) {
-      setUserProfile((prev) => ({
+      setUserProfile((prev: any) => ({
         ...prev,
         full_name: onboardingData.name,
         phone: onboardingData.phone,
@@ -416,7 +425,7 @@ export default function MyDhobhiGhatApp() {
     window.location.href = "/login";
   };
 
-  const addToCart = (item) => {
+  const addToCart = (item: any) => {
     const existing = cart.find((c) => c.id === item.id);
     if (existing)
       setCart(
@@ -424,9 +433,9 @@ export default function MyDhobhiGhatApp() {
       );
     else setCart([...cart, { ...item, qty: 1 }]);
   };
-  const removeFromCart = (id) => setCart(cart.filter((c) => c.id !== id));
+  const removeFromCart = (id: any) => setCart(cart.filter((c) => c.id !== id));
   const calculateCartTotal = () =>
-    cart.reduce((sum, item) => sum + item.price * item.qty, 0);
+    cart.reduce((sum: any, item: any) => sum + item.price * item.qty, 0);
 
   const handleCheckout = async () => {
     if (cart.length === 0)
@@ -437,7 +446,7 @@ export default function MyDhobhiGhatApp() {
       );
     const totalAmount = calculateCartTotal();
     const orderDetailsSummary = cart
-      .map((c) => `${c.name} (x${c.qty})`)
+      .map((c: any) => `${c.name} (x${c.qty})`)
       .join(", ");
 
     const { data, error } = await supabase
@@ -469,7 +478,7 @@ export default function MyDhobhiGhatApp() {
     }
   };
 
-  const handleOrderStatusUpdate = async (orderId, newStatus) => {
+  const handleOrderStatusUpdate = async (orderId: any, newStatus: any) => {
     const { error } = await supabase
       .from("laundry_orders")
       .update({ status: newStatus })
@@ -482,7 +491,7 @@ export default function MyDhobhiGhatApp() {
       );
   };
 
-  const handleAddStaffSubmit = async (e) => {
+  const handleAddStaffSubmit = async (e: any) => {
     e.preventDefault();
     const { data, error } = await supabase
       .from("staff_payroll")
@@ -501,7 +510,7 @@ export default function MyDhobhiGhatApp() {
         "Could not add staff: " + error.message,
         "error",
       );
-    if (data) setPayrollList([data[0], ...payrollList]);
+    if (data) setPayrollList((prev: any[]) => [data[0], ...prev]);
     setNewStaff({ name: "", designation: "", salary: "" });
     setIsAddStaffModalOpen(false);
     Swal.fire({
@@ -512,7 +521,7 @@ export default function MyDhobhiGhatApp() {
     });
   };
 
-  const handleAddExpenseSubmit = async (e) => {
+  const handleAddExpenseSubmit = async (e: any) => {
     e.preventDefault();
     const { data, error } = await supabase
       .from("business_expenses")
@@ -530,7 +539,7 @@ export default function MyDhobhiGhatApp() {
         "Could not log expense: " + error.message,
         "error",
       );
-    if (data) setReportsList([data[0], ...reportsList]);
+    if (data) setReportsList((prev: any[]) => [data[0], ...prev]);
     setNewExpense({ category: "", description: "", amount: "" });
     setIsAddExpenseModalOpen(false);
     Swal.fire({
@@ -542,13 +551,15 @@ export default function MyDhobhiGhatApp() {
   };
 
   const markAllNotificationsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+    setNotifications((prev: any[]) =>
+      prev.map((n: any) => ({ ...n, read: true })),
+    );
     setIsNotificationOpen(!isNotificationOpen);
   };
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const unreadCount = notifications.filter((n: any) => !n.read).length;
 
   const sidebarWidth = isSidebarCollapsed ? "80px" : "250px";
-  const getOrderStatusStyle = (status) => {
+  const getOrderStatusStyle = (status: any) => {
     switch (status) {
       case "Pickup":
         return "bg-secondary bg-opacity-10 text-secondary border-secondary";
@@ -565,7 +576,7 @@ export default function MyDhobhiGhatApp() {
     }
   };
 
-  const getPayrollStatusStyle = (status) => {
+  const getPayrollStatusStyle = (status: any) => {
     switch (status) {
       case "Paid":
         return "bg-success bg-opacity-10 text-success border-success";
@@ -618,7 +629,7 @@ export default function MyDhobhiGhatApp() {
                   className="form-select bg-light border-0 py-2"
                   required
                   value={newExpense.category}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setNewExpense({ ...newExpense, category: e.target.value })
                   }
                 >
@@ -643,7 +654,7 @@ export default function MyDhobhiGhatApp() {
                   className="form-control bg-light border-0 py-2"
                   required
                   value={newExpense.description}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setNewExpense({
                       ...newExpense,
                       description: e.target.value,
@@ -661,7 +672,7 @@ export default function MyDhobhiGhatApp() {
                   className="form-control bg-light border-0 py-2"
                   required
                   value={newExpense.amount}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setNewExpense({ ...newExpense, amount: e.target.value })
                   }
                   placeholder="500"
@@ -705,7 +716,7 @@ export default function MyDhobhiGhatApp() {
                   className="form-control bg-light border-0 py-2"
                   required
                   value={newStaff.name}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setNewStaff({ ...newStaff, name: e.target.value })
                   }
                   placeholder="Staff Name"
@@ -720,7 +731,7 @@ export default function MyDhobhiGhatApp() {
                   className="form-control bg-light border-0 py-2"
                   required
                   value={newStaff.designation}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setNewStaff({ ...newStaff, designation: e.target.value })
                   }
                   placeholder="e.g. Delivery Executive"
@@ -735,7 +746,7 @@ export default function MyDhobhiGhatApp() {
                   className="form-control bg-light border-0 py-2"
                   required
                   value={newStaff.salary}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setNewStaff({ ...newStaff, salary: e.target.value })
                   }
                   placeholder="15000"
@@ -776,7 +787,7 @@ export default function MyDhobhiGhatApp() {
                   className="form-control bg-light border-0 py-2"
                   required
                   value={onboardingData.name}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setOnboardingData({
                       ...onboardingData,
                       name: e.target.value,
@@ -794,7 +805,7 @@ export default function MyDhobhiGhatApp() {
                   className="form-control bg-light border-0 py-2"
                   required
                   value={onboardingData.phone}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setOnboardingData({
                       ...onboardingData,
                       phone: e.target.value,
@@ -812,7 +823,7 @@ export default function MyDhobhiGhatApp() {
                   required
                   rows="3"
                   value={onboardingData.address}
-                  onChange={(e) =>
+                  onChange={(e: any) =>
                     setOnboardingData({
                       ...onboardingData,
                       address: e.target.value,
@@ -1072,7 +1083,7 @@ export default function MyDhobhiGhatApp() {
                         No new notifications
                       </div>
                     ) : (
-                      notifications.map((n) => (
+                      notifications.map((n: any) => (
                         <div
                           key={n.id}
                           className="list-group-item list-group-item-action px-4 py-3 bg-light border-bottom"
@@ -1168,7 +1179,7 @@ export default function MyDhobhiGhatApp() {
                             {ordersList.length === 0 ? (
                               <tr>
                                 <td
-                                  colSpan="5"
+                                  colSpan={5}
                                   className="text-center py-5 text-muted"
                                 >
                                   <i className="bi bi-inbox fs-3 d-block mb-2"></i>{" "}
@@ -1176,7 +1187,7 @@ export default function MyDhobhiGhatApp() {
                                 </td>
                               </tr>
                             ) : (
-                              ordersList.map((order) => (
+                              ordersList.map((order: any) => (
                                 <tr
                                   key={order.order_id}
                                   className="border-bottom"
@@ -1317,7 +1328,7 @@ export default function MyDhobhiGhatApp() {
                             </tr>
                           </thead>
                           <tbody>
-                            {ordersList.slice(0, 5).map((order) => (
+                            {ordersList.slice(0, 5).map((order: any) => (
                               <tr
                                 key={order.order_id}
                                 className="border-bottom"
@@ -1412,7 +1423,7 @@ export default function MyDhobhiGhatApp() {
                               className="d-flex flex-column gap-3 mb-4"
                               style={{ maxHeight: "250px", overflowY: "auto" }}
                             >
-                              {cart.map((item) => (
+                              {cart.map((item: any) => (
                                 <div
                                   key={item.id}
                                   className="d-flex justify-content-between align-items-center border-bottom pb-2"
@@ -1522,7 +1533,7 @@ export default function MyDhobhiGhatApp() {
                             {ordersList.length === 0 ? (
                               <tr>
                                 <td
-                                  colSpan="6"
+                                  colSpan={6}
                                   className="text-center py-5 text-muted"
                                 >
                                   <i className="bi bi-inbox fs-3 d-block mb-2"></i>{" "}
@@ -1530,7 +1541,7 @@ export default function MyDhobhiGhatApp() {
                                 </td>
                               </tr>
                             ) : (
-                              ordersList.map((order) => (
+                              ordersList.map((order: any) => (
                                 <tr
                                   key={order.order_id}
                                   className="border-bottom"
@@ -1571,7 +1582,7 @@ export default function MyDhobhiGhatApp() {
                                     <select
                                       className="form-select form-select-sm d-inline-block w-auto border-light bg-light text-secondary shadow-none cursor-pointer"
                                       value={order.status}
-                                      onChange={(e) =>
+                                      onChange={(e: any) =>
                                         handleOrderStatusUpdate(
                                           order.order_id,
                                           e.target.value,
@@ -1646,7 +1657,7 @@ export default function MyDhobhiGhatApp() {
                         {payrollList.length === 0 ? (
                           <tr>
                             <td
-                              colSpan="5"
+                              colSpan={5}
                               className="text-center py-5 text-muted"
                             >
                               <i className="bi bi-wallet2 fs-3 d-block mb-2"></i>{" "}
@@ -1654,7 +1665,7 @@ export default function MyDhobhiGhatApp() {
                             </td>
                           </tr>
                         ) : (
-                          payrollList.map((staff) => (
+                          payrollList.map((staff: any) => (
                             <tr key={staff.staff_id} className="border-bottom">
                               <td className="ps-4 py-3 fw-bold text-dark">
                                 {staff.staff_name}
@@ -1798,7 +1809,7 @@ export default function MyDhobhiGhatApp() {
                         {reportsList.length === 0 ? (
                           <tr>
                             <td
-                              colSpan="4"
+                              colSpan={4}
                               className="text-center py-5 text-muted"
                             >
                               <i className="bi bi-receipt fs-3 d-block mb-2"></i>{" "}
@@ -1806,7 +1817,7 @@ export default function MyDhobhiGhatApp() {
                             </td>
                           </tr>
                         ) : (
-                          reportsList.map((expense) => (
+                          reportsList.map((expense: any) => (
                             <tr
                               key={expense.expense_id}
                               className="border-bottom"
