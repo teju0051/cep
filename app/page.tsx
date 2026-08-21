@@ -47,7 +47,7 @@ export default function LandingPage() {
                 className="fs-3 fw-black text-white tracking-wider"
                 style={{ letterSpacing: "1.5px", textTransform: "uppercase" }}
               >
-                MYDHOBHIGHAT
+                MyDhobhiGhat
               </span>
             </Link>
           </div>
@@ -332,7 +332,7 @@ export default function LandingPage() {
           ))}
         </div>
       </section>
-      
+
       {/* Feature Highlights - Premium Card Layout */}
       <section
         className="container-fluid px-4 px-md-5 bg-light position-relative z-2"
@@ -752,7 +752,7 @@ export default function LandingPage() {
                 <div className="bg-light p-3 rounded-circle text-primary">
                   <i className="bi bi-envelope-fill"></i>
                 </div>
-                <span className="fw-medium">hello@mydhobhighat.com</span>
+                <span className="fw-medium">hello@MyDhobhiGhat.com</span>
               </li>
               <li className="d-flex gap-3 align-items-center">
                 <div className="bg-light p-3 rounded-circle text-primary">

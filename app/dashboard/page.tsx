@@ -2,8 +2,21 @@
 import React, { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import { supabase } from "../lib/supabaseClient";
+import {
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
 
-export default function MyDhobhiGhatApp() {
+export default function LaundryERPApp() {
+  const [isAppLoading, setIsAppLoading] = useState<boolean>(true);
   const [activeSection, setActiveSection] = useState<string>("dashboard");
 
   // UI States
@@ -14,6 +27,10 @@ export default function MyDhobhiGhatApp() {
   const [currentTime, setCurrentTime] = useState<any>(null);
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
+
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
 
   // Popups
   const [selectedCustomerProfile, setSelectedCustomerProfile] =
@@ -30,6 +47,12 @@ export default function MyDhobhiGhatApp() {
     useState<boolean>(false);
   const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] =
     useState<boolean>(false);
+  const [isAddStockModalOpen, setIsAddStockModalOpen] =
+    useState<boolean>(false);
+
+  // Service Modal States
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState<boolean>(false);
+  const [editingServiceId, setEditingServiceId] = useState<any>(null);
 
   // Form States
   const [onboardingData, setOnboardingData] = useState<any>({
@@ -47,18 +70,26 @@ export default function MyDhobhiGhatApp() {
     description: "",
     amount: "",
   });
+  const [newStock, setNewStock] = useState<any>({
+    name: "",
+    quantity: "",
+    unit: "kg",
+    price: "",
+  });
+  const [serviceForm, setServiceForm] = useState<any>({ name: "", price: "" });
+
+  // Dynamic Cloth Catalog State (Fetched from DB)
+  const [clothCatalog, setClothCatalog] = useState<any[]>([
+    { service_id: 1, name: "Shirt / T-Shirt", price: 25 },
+    { service_id: 2, name: "Trouser / Jeans", price: 35 },
+    { service_id: 3, name: "Bedsheet (Single/Double)", price: 60 },
+    { service_id: 4, name: "Suit / Blazer", price: 150 },
+    { service_id: 5, name: "Saree / Traditional", price: 80 },
+  ]);
 
   // Customer Cart State
   const [cart, setCart] = useState<any[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<string>("Cod");
-
-  const clothCatalog = [
-    { id: 1, name: "Shirt / T-Shirt", price: 25 },
-    { id: 2, name: "Trouser / Jeans", price: 35 },
-    { id: 3, name: "Bedsheet (Single/Double)", price: 60 },
-    { id: 4, name: "Suit / Blazer", price: 150 },
-    { id: 5, name: "Saree / Traditional", price: 80 },
-  ];
 
   const [dashboardStats, setDashboardStats] = useState<any>({
     totalOrders: 0,
@@ -73,9 +104,21 @@ export default function MyDhobhiGhatApp() {
     yearRev: 0,
     yearOrders: 0,
   });
+
   const [ordersList, setOrdersList] = useState<any[]>([]);
   const [payrollList, setPayrollList] = useState<any[]>([]);
   const [reportsList, setReportsList] = useState<any[]>([]);
+  const [stocksList, setStocksList] = useState<any[]>([]);
+
+  // Graph Colors
+  const COLORS = [
+    "#0d6efd",
+    "#198754",
+    "#fd7e14",
+    "#dc3545",
+    "#6f42c1",
+    "#20c997",
+  ];
 
   // Responsive Check
   useEffect(() => {
@@ -120,7 +163,7 @@ export default function MyDhobhiGhatApp() {
     return () => clearInterval(timer);
   }, []);
 
-  // Fetch Session and Profile on Load
+  // Fetch Session, Profile, and Data on Load
   useEffect(() => {
     const initApp = async () => {
       const {
@@ -161,6 +204,16 @@ export default function MyDhobhiGhatApp() {
         setIsOnboardingOpen(true);
       }
 
+      // Fetch Dynamic Services
+      const { data: fetchedServices } = await supabase
+        .from("laundry_services")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (fetchedServices && fetchedServices.length > 0) {
+        setClothCatalog(fetchedServices);
+      }
+
+      // Fetch Orders
       const { data: orders } = await supabase
         .from("laundry_orders")
         .select("*")
@@ -170,15 +223,16 @@ export default function MyDhobhiGhatApp() {
         updateDashboardStats(orders);
       }
 
-      if (profile?.role === "admin") {
-        const { data: payroll } = await supabase
-          .from("staff_payroll")
-          .select("*")
-          .order("created_at", { ascending: false });
-        if (payroll) setPayrollList(payroll);
-      }
+      // Fetch Admin/Manager Data
+      if (profile?.role === "admin" || profile?.role === "manager") {
+        if (profile?.role === "admin") {
+          const { data: payroll } = await supabase
+            .from("staff_payroll")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (payroll) setPayrollList(payroll);
+        }
 
-      if (profile?.role !== "user") {
         const { data: expenses } = await supabase
           .from("business_expenses")
           .select("*")
@@ -194,7 +248,18 @@ export default function MyDhobhiGhatApp() {
             totalExpenses: totalExp,
           }));
         }
+
+        const { data: stocks } = await supabase
+          .from("inventory_stocks")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (stocks) setStocksList(stocks);
       }
+
+      // 2 Second Loading Spinner Delay for Premium Feel
+      setTimeout(() => {
+        setIsAppLoading(false);
+      }, 2000);
     };
 
     initApp();
@@ -215,7 +280,6 @@ export default function MyDhobhiGhatApp() {
       ordYear = 0;
 
     orders.forEach((o: any) => {
-      // Don't count rejected orders towards revenue
       if (o.status !== "Rejected") {
         const amt = parseFloat(o.total_amount) || 0;
         totalRev += amt;
@@ -260,7 +324,6 @@ export default function MyDhobhiGhatApp() {
     }));
   };
 
-  // SOUND EFFECT FUNCTION
   const playNotificationSound = () => {
     const audioEl = document.getElementById(
       "notificationSound",
@@ -349,13 +412,10 @@ export default function MyDhobhiGhatApp() {
           ) {
             if (payload.old.status !== payload.new.status) {
               playNotificationSound();
-
-              // If rejected, include the reason in the notification
               let msg = `Your order id: #${payload.new.order_id} status has been updated to ${payload.new.status}!`;
               if (payload.new.status === "Rejected") {
                 msg = `Your order id: #${payload.new.order_id} was Rejected. Reason: ${payload.new.rejection_reason}`;
               }
-
               addNotification(msg);
 
               Swal.fire({
@@ -409,7 +469,7 @@ export default function MyDhobhiGhatApp() {
           <div class="text-start mt-3 bg-light p-3 rounded-3 border">
             <p class="mb-2"><i class="bi bi-person-badge-fill text-primary me-2"></i> <strong>Owner:</strong> Avinash Hirwale</p>
             <p class="mb-2"><i class="bi bi-telephone-fill text-success me-2"></i> <strong>Contact:</strong> +91 98765 43210</p>
-            <p class="mb-0"><i class="bi bi-geo-alt-fill text-danger me-2"></i> <strong>Address:</strong> My Dhobi Ghat, Main Street</p>
+            <p class="mb-0"><i class="bi bi-geo-alt-fill text-danger me-2"></i> <strong>Address:</strong> Laundry ERP, Main Street</p>
           </div>
         `,
         icon: "info",
@@ -514,14 +574,17 @@ export default function MyDhobhiGhatApp() {
   };
 
   const addToCart = (item: any) => {
-    const existing = cart.find((c) => c.id === item.id);
+    const existing = cart.find((c) => c.service_id === item.service_id);
     if (existing)
       setCart(
-        cart.map((c) => (c.id === item.id ? { ...c, qty: c.qty + 1 } : c)),
+        cart.map((c) =>
+          c.service_id === item.service_id ? { ...c, qty: c.qty + 1 } : c,
+        ),
       );
     else setCart([...cart, { ...item, qty: 1 }]);
   };
-  const removeFromCart = (id: any) => setCart(cart.filter((c) => c.id !== id));
+  const removeFromCart = (id: any) =>
+    setCart(cart.filter((c) => c.service_id !== id));
   const calculateCartTotal = () =>
     cart.reduce((sum: any, item: any) => sum + item.price * item.qty, 0);
 
@@ -567,7 +630,7 @@ export default function MyDhobhiGhatApp() {
     }
   };
 
-  // ================= ORDER STATUS UPDATE (WITH REJECTION LOGIC) =================
+  // ================= ORDER STATUS UPDATE =================
   const handleOrderStatusUpdate = async (orderId: any, newStatus: any) => {
     if (newStatus === "Rejected") {
       const { value: formValues, isDismissed } = await Swal.fire({
@@ -618,7 +681,6 @@ export default function MyDhobhiGhatApp() {
         .from("laundry_orders")
         .update({ status: "Rejected", rejection_reason: formValues })
         .eq("order_id", orderId);
-
       if (error)
         Swal.fire(
           "Database Error",
@@ -630,7 +692,6 @@ export default function MyDhobhiGhatApp() {
         .from("laundry_orders")
         .update({ status: newStatus, rejection_reason: null })
         .eq("order_id", orderId);
-
       if (error)
         Swal.fire(
           "Database Error",
@@ -640,6 +701,7 @@ export default function MyDhobhiGhatApp() {
     }
   };
 
+  // ================= ADMIN ADD SUBMITS =================
   const handleAddStaffSubmit = async (e: any) => {
     e.preventDefault();
     const { data, error } = await supabase
@@ -691,6 +753,163 @@ export default function MyDhobhiGhatApp() {
     }
   };
 
+  const handleAddStockSubmit = async (e: any) => {
+    e.preventDefault();
+    const { data, error } = await supabase
+      .from("inventory_stocks")
+      .insert([
+        {
+          item_name: newStock.name,
+          quantity: parseFloat(newStock.quantity),
+          unit: newStock.unit,
+          price_per_unit: parseFloat(newStock.price),
+        },
+      ])
+      .select();
+
+    if (!error && data) {
+      setStocksList((prev: any[]) => [data[0], ...prev]);
+      setNewStock({ name: "", quantity: "", unit: "kg", price: "" });
+      setIsAddStockModalOpen(false);
+      Swal.fire({
+        icon: "success",
+        title: "Stock Added!",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    } else {
+      Swal.fire("Error", error?.message || "Failed to add stock", "error");
+    }
+  };
+
+  const handleDeleteStock = async (stockId: any) => {
+    const { isConfirmed } = await Swal.fire({
+      title: "Are you sure?",
+      text: "You are about to delete this stock item.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#dc3545",
+      confirmButtonText: "Yes, delete it!",
+    });
+    if (isConfirmed) {
+      const { error } = await supabase
+        .from("inventory_stocks")
+        .delete()
+        .eq("stock_id", stockId);
+      if (!error) {
+        setStocksList(stocksList.filter((s: any) => s.stock_id !== stockId));
+        Swal.fire({
+          icon: "success",
+          title: "Deleted!",
+          showConfirmButton: false,
+          timer: 1000,
+        });
+      }
+    }
+  };
+
+  // ================= DYNAMIC SERVICE MANAGEMENT =================
+  const openAddServiceModal = () => {
+    setEditingServiceId(null);
+    setServiceForm({ name: "", price: "" });
+    setIsServiceModalOpen(true);
+  };
+
+  const openEditServiceModal = (service: any) => {
+    setEditingServiceId(service.service_id);
+    setServiceForm({ name: service.name, price: service.price });
+    setIsServiceModalOpen(true);
+  };
+
+  const handleSaveServiceSubmit = async (e: any) => {
+    e.preventDefault();
+    if (editingServiceId) {
+      // UPDATE existing service
+      const { data, error } = await supabase
+        .from("laundry_services")
+        .update({
+          name: serviceForm.name,
+          price: parseFloat(serviceForm.price),
+        })
+        .eq("service_id", editingServiceId)
+        .select();
+
+      if (!error && data) {
+        setClothCatalog((prev: any[]) =>
+          prev.map((s: any) =>
+            s.service_id === editingServiceId ? data[0] : s,
+          ),
+        );
+        setIsServiceModalOpen(false);
+        Swal.fire({
+          icon: "success",
+          title: "Service Updated!",
+          showConfirmButton: false,
+          timer: 1500,
+        });
+      } else {
+        Swal.fire(
+          "Error",
+          error?.message || "Failed to update service",
+          "error",
+        );
+      }
+    } else {
+      // ADD new service
+      const { data, error } = await supabase
+        .from("laundry_services")
+        .insert([
+          {
+            name: serviceForm.name,
+            price: parseFloat(serviceForm.price),
+          },
+        ])
+        .select();
+
+      if (!error && data) {
+        setClothCatalog((prev: any[]) => [...prev, data[0]]);
+        setIsServiceModalOpen(false);
+        Swal.fire({
+          icon: "success",
+          title: "Service Added!",
+          text: "Customers will now see this in their app.",
+          showConfirmButton: false,
+          timer: 2000,
+        });
+      } else {
+        Swal.fire("Error", error?.message || "Failed to add service", "error");
+      }
+    }
+  };
+
+  const handleDeleteService = async (serviceId: any) => {
+    const { isConfirmed } = await Swal.fire({
+      title: "Delete Service?",
+      text: "This will remove it from the customer app immediately.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#dc3545",
+      confirmButtonText: "Yes, remove it!",
+    });
+    if (isConfirmed) {
+      const { error } = await supabase
+        .from("laundry_services")
+        .delete()
+        .eq("service_id", serviceId);
+      if (!error) {
+        setClothCatalog(
+          clothCatalog.filter((s: any) => s.service_id !== serviceId),
+        );
+        Swal.fire({
+          icon: "success",
+          title: "Deleted!",
+          showConfirmButton: false,
+          timer: 1000,
+        });
+      }
+    }
+  };
+
   const markAllNotificationsRead = () => {
     setNotifications((prev: any[]) =>
       prev.map((n: any) => ({ ...n, read: true })),
@@ -699,7 +918,6 @@ export default function MyDhobhiGhatApp() {
   };
   const unreadCount = notifications.filter((n: any) => !n.read).length;
 
-  // Responsive Sidebar Width handling
   const sidebarWidth = isMobile
     ? "260px"
     : isSidebarCollapsed
@@ -743,16 +961,80 @@ export default function MyDhobhiGhatApp() {
     ? userProfile.full_name.split(" ")[0]
     : "Tejas";
 
+  // ================= FILTER LOGIC FOR ORDERS =================
+  const filteredOrders = ordersList.filter((order: any) => {
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch =
+      order.order_id.toString().includes(searchLower) ||
+      (order.customer_name &&
+        order.customer_name.toLowerCase().includes(searchLower)) ||
+      (order.customer_phone && order.customer_phone.includes(searchLower));
+
+    const matchesStatus =
+      statusFilter === "All" || order.status === statusFilter;
+
+    return matchesSearch && matchesStatus;
+  });
+
+  // ================= CHART DATA PROCESSING =================
+  const getExpensePieData = () => {
+    const categoryTotals: any = {};
+    reportsList.forEach((exp: any) => {
+      const cat = exp.category || "Other";
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + parseFloat(exp.amount);
+    });
+    return Object.keys(categoryTotals).map((key) => ({
+      name: key,
+      value: categoryTotals[key],
+    }));
+  };
+
+  const getRevenueLineData = () => {
+    const dataMap: any = {};
+    ordersList.forEach((o: any) => {
+      if (o.status !== "Rejected" && o.created_at) {
+        const d = new Date(o.created_at).toLocaleDateString("en-IN", {
+          month: "short",
+          day: "numeric",
+        });
+        dataMap[d] = (dataMap[d] || 0) + (parseFloat(o.total_amount) || 0);
+      }
+    });
+    return Object.keys(dataMap)
+      .reverse()
+      .map((date) => ({ name: date, Revenue: dataMap[date] }));
+  };
+
+  const revenueLineData = getRevenueLineData();
+  const expensePieData = getExpensePieData();
+
+  // ================= INITIAL PREMIUM LOADING SPINNER =================
+  if (isAppLoading) {
+    return (
+      <div
+        className="d-flex flex-column w-100 vh-100 justify-content-center align-items-center"
+        style={{ backgroundColor: "#F8F9FB" }}
+      >
+        <div
+          className="spinner-border text-primary shadow-sm mb-3"
+          style={{ width: "4rem", height: "4rem", borderWidth: "0.35em" }}
+          role="status"
+        >
+          <span className="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
-      className="d-flex w-100 position-relative"
+      className="d-flex w-100 position-relative fade-in"
       style={{
         minHeight: "100vh",
         backgroundColor: "#F8F9FB",
         overflowX: "hidden",
       }}
     >
-      {/* HIDDEN AUDIO ELEMENT */}
       <audio
         id="notificationSound"
         src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
@@ -761,7 +1043,7 @@ export default function MyDhobhiGhatApp() {
 
       {/* ================= MODALS ================= */}
 
-      {/* ORDER DETAILS POPUP (For Admins to see what users ordered) */}
+      {/* ORDER DETAILS POPUP */}
       {selectedOrderDetails && (
         <div
           className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center fade-in"
@@ -848,7 +1130,7 @@ export default function MyDhobhiGhatApp() {
         </div>
       )}
 
-      {/* CUSTOMER PROFILE POPUP (For Admins) */}
+      {/* CUSTOMER PROFILE POPUP */}
       {selectedCustomerProfile && (
         <div
           className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center fade-in"
@@ -1081,6 +1363,160 @@ export default function MyDhobhiGhatApp() {
         </div>
       )}
 
+      {/* ADD / EDIT STOCK MODAL */}
+      {isAddStockModalOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "450px" }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="fw-bold mb-0 text-dark">Add Inventory Stock</h5>
+              <button
+                onClick={() => setIsAddStockModalOpen(false)}
+                className="btn-close"
+              ></button>
+            </div>
+            <form onSubmit={handleAddStockSubmit}>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Item Name
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newStock.name}
+                  onChange={(e: any) =>
+                    setNewStock({ ...newStock, name: e.target.value })
+                  }
+                  placeholder="e.g. Ariel Detergent"
+                />
+              </div>
+              <div className="row">
+                <div className="col-8 mb-3">
+                  <label className="form-label text-secondary small fw-semibold">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    className="form-control bg-light border-0 py-2"
+                    required
+                    value={newStock.quantity}
+                    onChange={(e: any) =>
+                      setNewStock({ ...newStock, quantity: e.target.value })
+                    }
+                    placeholder="10"
+                  />
+                </div>
+                <div className="col-4 mb-3">
+                  <label className="form-label text-secondary small fw-semibold">
+                    Unit
+                  </label>
+                  <select
+                    className="form-select bg-light border-0 py-2"
+                    value={newStock.unit}
+                    onChange={(e: any) =>
+                      setNewStock({ ...newStock, unit: e.target.value })
+                    }
+                  >
+                    <option value="kg">kg</option>
+                    <option value="Ltr">Ltr</option>
+                    <option value="ml">ml</option>
+                    <option value="pcs">pcs</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="form-label text-secondary small fw-semibold">
+                  Total Cost (₹)
+                </label>
+                <input
+                  type="number"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newStock.price}
+                  onChange={(e: any) =>
+                    setNewStock({ ...newStock, price: e.target.value })
+                  }
+                  placeholder="1500"
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3"
+              >
+                Save Stock Item
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ADD / EDIT SERVICE MODAL */}
+      {isServiceModalOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "450px" }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="fw-bold mb-0 text-dark">
+                {editingServiceId ? "Edit Service" : "Add New Service"}
+              </h5>
+              <button
+                onClick={() => setIsServiceModalOpen(false)}
+                className="btn-close"
+              ></button>
+            </div>
+            <form onSubmit={handleSaveServiceSubmit}>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Service Name
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={serviceForm.name}
+                  onChange={(e: any) =>
+                    setServiceForm({ ...serviceForm, name: e.target.value })
+                  }
+                  placeholder="e.g. Dry Cleaning / Jacket"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="form-label text-secondary small fw-semibold">
+                  Price per piece (₹)
+                </label>
+                <input
+                  type="number"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={serviceForm.price}
+                  onChange={(e: any) =>
+                    setServiceForm({ ...serviceForm, price: e.target.value })
+                  }
+                  placeholder="150"
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3"
+              >
+                {editingServiceId ? "Update Service" : "Add to App Catalog"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* ONBOARDING MODAL */}
       {isOnboardingOpen && (
         <div
@@ -1280,7 +1716,7 @@ export default function MyDhobhiGhatApp() {
           {(!isSidebarCollapsed || isMobile) && (
             <div className="ms-3 text-white text-nowrap">
               <h5 className="fw-bold mb-0" style={{ letterSpacing: "0.5px" }}>
-                MyDhobhi<span className="text-primary">Ghat</span>
+                Laundry <span className="text-primary">ERP</span>
               </h5>
               <small
                 className="text-white-50"
@@ -1350,6 +1786,7 @@ export default function MyDhobhiGhatApp() {
                 )}
             </button>
 
+            {/* ONLY ADMIN CAN SEE PAYROLL */}
             {userProfile?.role === "admin" && (
               <button
                 title="Payroll"
@@ -1376,30 +1813,85 @@ export default function MyDhobhiGhatApp() {
               </button>
             )}
 
-            {userProfile?.role !== "user" && (
-              <button
-                title="Reports"
-                onClick={() => {
-                  setActiveSection("reports");
-                  if (isMobile) setIsSidebarCollapsed(true);
-                }}
-                className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "reports" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
-                style={{
-                  backgroundColor:
-                    activeSection === "reports" ? "#0d6efd" : "transparent",
-                }}
-              >
-                <div className="d-flex align-items-center">
-                  <i
-                    className={`bi bi-bar-chart-fill fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
-                  ></i>
-                  {(!isSidebarCollapsed || isMobile) && <span>Reports</span>}
-                </div>
-                {(!isSidebarCollapsed || isMobile) &&
-                  activeSection === "reports" && (
-                    <i className="bi bi-chevron-right small"></i>
-                  )}
-              </button>
+            {(userProfile?.role === "admin" ||
+              userProfile?.role === "manager") && (
+              <>
+                <button
+                  title="Services"
+                  onClick={() => {
+                    setActiveSection("services");
+                    if (isMobile) setIsSidebarCollapsed(true);
+                  }}
+                  className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "services" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+                  style={{
+                    backgroundColor:
+                      activeSection === "services" ? "#0d6efd" : "transparent",
+                  }}
+                >
+                  <div className="d-flex align-items-center">
+                    <i
+                      className={`bi bi-tag-fill fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                    ></i>
+                    {(!isSidebarCollapsed || isMobile) && (
+                      <span>Services Mgt</span>
+                    )}
+                  </div>
+                  {(!isSidebarCollapsed || isMobile) &&
+                    activeSection === "services" && (
+                      <i className="bi bi-chevron-right small"></i>
+                    )}
+                </button>
+
+                <button
+                  title="Stocks"
+                  onClick={() => {
+                    setActiveSection("stocks");
+                    if (isMobile) setIsSidebarCollapsed(true);
+                  }}
+                  className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "stocks" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+                  style={{
+                    backgroundColor:
+                      activeSection === "stocks" ? "#0d6efd" : "transparent",
+                  }}
+                >
+                  <div className="d-flex align-items-center">
+                    <i
+                      className={`bi bi-box-seam fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                    ></i>
+                    {(!isSidebarCollapsed || isMobile) && (
+                      <span>Inventory Stocks</span>
+                    )}
+                  </div>
+                  {(!isSidebarCollapsed || isMobile) &&
+                    activeSection === "stocks" && (
+                      <i className="bi bi-chevron-right small"></i>
+                    )}
+                </button>
+
+                <button
+                  title="Reports"
+                  onClick={() => {
+                    setActiveSection("reports");
+                    if (isMobile) setIsSidebarCollapsed(true);
+                  }}
+                  className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "reports" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+                  style={{
+                    backgroundColor:
+                      activeSection === "reports" ? "#0d6efd" : "transparent",
+                  }}
+                >
+                  <div className="d-flex align-items-center">
+                    <i
+                      className={`bi bi-bar-chart-fill fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                    ></i>
+                    {(!isSidebarCollapsed || isMobile) && <span>Reports</span>}
+                  </div>
+                  {(!isSidebarCollapsed || isMobile) &&
+                    activeSection === "reports" && (
+                      <i className="bi bi-chevron-right small"></i>
+                    )}
+                </button>
+              </>
             )}
           </nav>
 
@@ -1430,7 +1922,7 @@ export default function MyDhobhiGhatApp() {
                   className="text-white-50 small text-center"
                   style={{ fontSize: "0.65rem" }}
                 >
-                  &copy; 2026 MyDhobhiGhat
+                  &copy; 2026 Laundry ERP
                   <br />
                   All rights reserved.
                 </div>
@@ -1759,9 +2251,6 @@ export default function MyDhobhiGhatApp() {
                     </div>
                   </div>
                   <div className="d-flex gap-2">
-                    <button className="btn btn-light border btn-sm fw-medium rounded-3 px-3 d-none d-md-block">
-                      <i className="bi bi-funnel"></i> Filter
-                    </button>
                     <button
                       onClick={() => setActiveSection("orders")}
                       className="btn btn-primary btn-sm fw-medium rounded-3 px-3"
@@ -1827,7 +2316,6 @@ export default function MyDhobhiGhatApp() {
                                 {userProfile?.role !== "user" ? (
                                   <span
                                     className="text-primary text-decoration-underline cursor-pointer"
-                                    style={{ cursor: "pointer" }}
                                     onClick={() =>
                                       setSelectedOrderDetails(order)
                                     }
@@ -1842,7 +2330,6 @@ export default function MyDhobhiGhatApp() {
                                 {userProfile?.role !== "user" ? (
                                   <span
                                     className="fw-semibold text-dark d-block cursor-pointer text-decoration-underline"
-                                    style={{ cursor: "pointer" }}
                                     onClick={() =>
                                       setSelectedCustomerProfile({
                                         name: order.customer_name,
@@ -1903,6 +2390,104 @@ export default function MyDhobhiGhatApp() {
             </div>
           )}
 
+          {/* ================= SERVICES MANAGEMENT SECTION ================= */}
+          {activeSection === "services" &&
+            (userProfile?.role === "admin" ||
+              userProfile?.role === "manager") && (
+              <div className="fade-in">
+                <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                  <h4 className="fw-bold text-dark mb-0">Services Catalog</h4>
+                  <button
+                    onClick={openAddServiceModal}
+                    className="btn btn-primary btn-sm px-4 py-2 fw-medium rounded-3 shadow-sm d-flex align-items-center gap-2"
+                  >
+                    <i className="bi bi-plus-circle"></i> Add New Service
+                  </button>
+                </div>
+
+                <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                  <div className="card-body p-0">
+                    <div className="table-responsive">
+                      <table className="table table-hover align-middle mb-0 text-nowrap">
+                        <thead className="bg-light border-bottom">
+                          <tr
+                            className="text-secondary"
+                            style={{
+                              fontSize: "0.75rem",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
+                            <th className="fw-bold py-3 ps-4 border-0">
+                              SERVICE ID
+                            </th>
+                            <th className="fw-bold py-3 border-0">
+                              SERVICE NAME
+                            </th>
+                            <th className="fw-bold py-3 border-0">
+                              PRICE PER PIECE
+                            </th>
+                            <th className="fw-bold py-3 pe-4 border-0 text-end">
+                              ACTIONS
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {clothCatalog.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={4}
+                                className="text-center py-5 text-muted"
+                              >
+                                <i className="bi bi-tags fs-3 d-block mb-2"></i>{" "}
+                                No services found in catalog.
+                              </td>
+                            </tr>
+                          ) : (
+                            clothCatalog.map((service: any) => (
+                              <tr
+                                key={service.service_id}
+                                className="border-bottom border-light"
+                              >
+                                <td className="ps-4 py-3 fw-bold text-secondary small">
+                                  #{service.service_id}
+                                </td>
+                                <td className="py-3 fw-bold text-dark">
+                                  {service.name}
+                                </td>
+                                <td className="py-3 fw-bold text-success bg-success bg-opacity-10 rounded px-2 text-center d-inline-block mt-2">
+                                  ₹{service.price}
+                                </td>
+                                <td className="pe-4 py-3 text-end">
+                                  <button
+                                    onClick={() =>
+                                      openEditServiceModal(service)
+                                    }
+                                    className="btn btn-sm btn-light border text-primary shadow-sm rounded-3 py-1 px-2 me-2"
+                                    title="Edit Service"
+                                  >
+                                    <i className="bi bi-pencil-square"></i>
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteService(service.service_id)
+                                    }
+                                    className="btn btn-sm btn-white text-danger border shadow-sm rounded-3 py-1 px-2"
+                                    title="Delete Service"
+                                  >
+                                    <i className="bi bi-trash3-fill"></i>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
           {/* ================= ORDERS / BOOKING SECTION ================= */}
           {activeSection === "orders" && (
             <div className="fade-in">
@@ -1920,11 +2505,11 @@ export default function MyDhobhiGhatApp() {
                   </div>
 
                   <div className="row g-4">
-                    {/* Left Side: Cloth Catalog */}
+                    {/* Left Side: Cloth Catalog (DYNAMIC FROM DB) */}
                     <div className="col-lg-7">
                       <div className="row g-3">
                         {clothCatalog.map((cloth) => (
-                          <div className="col-sm-6" key={cloth.id}>
+                          <div className="col-sm-6" key={cloth.service_id}>
                             <div
                               className="card border border-light shadow-sm rounded-4 p-3 h-100 d-flex flex-row justify-content-between align-items-center bg-white premium-hover cursor-pointer"
                               style={{ transition: "all 0.3s ease" }}
@@ -2023,7 +2608,7 @@ export default function MyDhobhiGhatApp() {
                             >
                               {cart.map((item: any) => (
                                 <div
-                                  key={item.id}
+                                  key={item.service_id}
                                   className="d-flex justify-content-between align-items-center p-3 border border-light rounded-3 bg-light bg-opacity-50 cart-item-anim shadow-sm"
                                 >
                                   <div className="d-flex flex-column">
@@ -2043,7 +2628,9 @@ export default function MyDhobhiGhatApp() {
                                       ₹{item.price * item.qty}
                                     </span>
                                     <button
-                                      onClick={() => removeFromCart(item.id)}
+                                      onClick={() =>
+                                        removeFromCart(item.service_id)
+                                      }
                                       className="btn btn-sm btn-white text-danger border shadow-sm rounded-circle d-flex justify-content-center align-items-center"
                                       style={{ width: "28px", height: "28px" }}
                                     >
@@ -2131,11 +2718,47 @@ export default function MyDhobhiGhatApp() {
                   </div>
                 </div>
               ) : (
-                /* ADMIN / MANAGER ORDER MANAGEMENT VIEW */
+                /* ADMIN / MANAGER ORDER MANAGEMENT VIEW WITH SEARCH & FILTER */
                 <div>
-                  <div className="d-flex justify-content-between align-items-center mb-4">
+                  <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
                     <h4 className="fw-bold text-dark mb-0">Order Management</h4>
                   </div>
+
+                  {/* SEARCH & FILTERS BAR */}
+                  <div className="card border-0 shadow-sm rounded-4 bg-white mb-4">
+                    <div className="card-body p-3 d-flex flex-column flex-md-row gap-3 align-items-center">
+                      <div className="position-relative flex-grow-1 w-100">
+                        <i className="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                        <input
+                          type="text"
+                          className="form-control bg-light border-0 rounded-pill py-2 ps-5"
+                          placeholder="Search by Order ID, Customer Name, or Phone Number..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      <div className="d-flex align-items-center gap-2 w-100 w-md-auto">
+                        <i className="bi bi-funnel text-primary fs-5"></i>
+                        <select
+                          className="form-select bg-light border-0 rounded-pill py-2 w-100 fw-medium text-dark"
+                          value={statusFilter}
+                          onChange={(e) => setStatusFilter(e.target.value)}
+                          style={{ minWidth: "180px" }}
+                        >
+                          <option value="All">All Statuses</option>
+                          <option value="Pickup">Pickup</option>
+                          <option value="Received">Received</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Finished">Finished</option>
+                          <option value="Out for Delivery">
+                            Out for Delivery
+                          </option>
+                          <option value="Rejected">Rejected</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="card border-0 shadow-sm rounded-4 bg-white">
                     <div className="card-body p-0">
                       <div className="table-responsive">
@@ -2165,18 +2788,18 @@ export default function MyDhobhiGhatApp() {
                             </tr>
                           </thead>
                           <tbody>
-                            {ordersList.length === 0 ? (
+                            {filteredOrders.length === 0 ? (
                               <tr>
                                 <td
                                   colSpan={6}
                                   className="text-center py-5 text-muted"
                                 >
-                                  <i className="bi bi-inbox fs-3 d-block mb-2"></i>{" "}
-                                  No orders found.
+                                  <i className="bi bi-search fs-3 d-block mb-2"></i>{" "}
+                                  No orders found matching your search.
                                 </td>
                               </tr>
                             ) : (
-                              ordersList.map((order: any) => (
+                              filteredOrders.map((order: any) => (
                                 <tr
                                   key={order.order_id}
                                   className="border-bottom border-light"
@@ -2184,7 +2807,6 @@ export default function MyDhobhiGhatApp() {
                                   <td className="ps-4 py-3 fw-bold text-dark">
                                     <span
                                       className="text-primary text-decoration-underline cursor-pointer"
-                                      style={{ cursor: "pointer" }}
                                       onClick={() =>
                                         setSelectedOrderDetails(order)
                                       }
@@ -2205,7 +2827,6 @@ export default function MyDhobhiGhatApp() {
                                   <td className="py-3">
                                     <span
                                       className="fw-semibold text-dark d-block cursor-pointer text-decoration-underline"
-                                      style={{ cursor: "pointer" }}
                                       onClick={() =>
                                         setSelectedCustomerProfile({
                                           name: order.customer_name,
@@ -2400,11 +3021,104 @@ export default function MyDhobhiGhatApp() {
             </div>
           )}
 
-          {/* ================= REPORTS SECTION ================= */}
+          {/* ================= INVENTORY / STOCKS SECTION ================= */}
+          {activeSection === "stocks" &&
+            (userProfile?.role === "admin" ||
+              userProfile?.role === "manager") && (
+              <div className="fade-in">
+                <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                  <h4 className="fw-bold text-dark mb-0">Inventory Stocks</h4>
+                  <button
+                    onClick={() => setIsAddStockModalOpen(true)}
+                    className="btn btn-primary btn-sm px-4 py-2 fw-medium rounded-3 shadow-sm d-flex align-items-center gap-2"
+                  >
+                    <i className="bi bi-plus-circle"></i> Add Stock Item
+                  </button>
+                </div>
+
+                <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                  <div className="card-body p-0">
+                    <div className="table-responsive">
+                      <table className="table table-hover align-middle mb-0 text-nowrap">
+                        <thead className="bg-light border-bottom">
+                          <tr
+                            className="text-secondary"
+                            style={{
+                              fontSize: "0.75rem",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
+                            <th className="fw-bold py-3 ps-4 border-0">
+                              STOCK ID
+                            </th>
+                            <th className="fw-bold py-3 border-0">ITEM NAME</th>
+                            <th className="fw-bold py-3 border-0">QUANTITY</th>
+                            <th className="fw-bold py-3 border-0">
+                              TOTAL PRICE
+                            </th>
+                            <th className="fw-bold py-3 pe-4 border-0 text-end">
+                              ACTIONS
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stocksList.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={5}
+                                className="text-center py-5 text-muted"
+                              >
+                                <i className="bi bi-box-seam fs-3 d-block mb-2"></i>{" "}
+                                No inventory stocks found.
+                              </td>
+                            </tr>
+                          ) : (
+                            stocksList.map((stock: any) => (
+                              <tr
+                                key={stock.stock_id}
+                                className="border-bottom border-light"
+                              >
+                                <td className="ps-4 py-3 fw-bold text-secondary small">
+                                  #{stock.stock_id}
+                                </td>
+                                <td className="py-3 fw-bold text-dark">
+                                  {stock.item_name}
+                                </td>
+                                <td className="py-3 text-primary fw-bold bg-primary bg-opacity-10 rounded px-2 text-center d-inline-block mt-2">
+                                  {stock.quantity} {stock.unit}
+                                </td>
+                                <td className="py-3 fw-bold text-dark">
+                                  ₹{stock.price_per_unit}
+                                </td>
+                                <td className="pe-4 py-3 text-end">
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteStock(stock.stock_id)
+                                    }
+                                    className="btn btn-sm btn-white text-danger border shadow-sm rounded-3 py-1 px-2"
+                                    title="Delete Stock"
+                                  >
+                                    <i className="bi bi-trash3-fill"></i>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {/* ================= REPORTS SECTION (WITH GRAPHS) ================= */}
           {activeSection === "reports" && userProfile?.role !== "user" && (
             <div className="fade-in">
               <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
-                <h4 className="fw-bold text-dark mb-0">Financial Reports</h4>
+                <h4 className="fw-bold text-dark mb-0">
+                  Financial Reports & Analytics
+                </h4>
                 <button
                   onClick={handleExportPDF}
                   className="btn btn-outline-primary btn-sm px-4 py-2 fw-medium rounded-3 bg-white shadow-sm d-flex align-items-center gap-2"
@@ -2413,52 +3127,130 @@ export default function MyDhobhiGhatApp() {
                 </button>
               </div>
 
+              {/* GRAPHS ROW */}
               <div className="row g-4 mb-4">
-                <div className="col-md-6">
-                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4 d-flex flex-row align-items-center justify-content-between premium-hover transition-all">
-                    <div>
-                      <h6
-                        className="text-secondary fw-semibold mb-1 text-uppercase"
-                        style={{ fontSize: "0.8rem" }}
-                      >
-                        Total Revenue
-                      </h6>
-                      <h3 className="fw-bold text-success mb-0">
-                        ₹{dashboardStats.revenue}
-                      </h3>
-                    </div>
-                    <div
-                      className="bg-success bg-opacity-10 text-success rounded-circle d-flex justify-content-center align-items-center"
-                      style={{ width: "60px", height: "60px" }}
-                    >
-                      <i className="bi bi-graph-up-arrow fs-3"></i>
+                <div className="col-lg-8">
+                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4">
+                    <h6 className="fw-bold text-dark mb-4">
+                      Revenue Trend (Last 7 Days)
+                    </h6>
+                    <div style={{ height: "300px", width: "100%" }}>
+                      {revenueLineData.length === 0 ? (
+                        <div className="d-flex flex-column justify-content-center align-items-center h-100 bg-light rounded-4 border border-dashed">
+                          <i
+                            className="bi bi-graph-up text-muted mb-2"
+                            style={{ fontSize: "2rem" }}
+                          ></i>
+                          <h6 className="fw-bold text-secondary mb-1">
+                            No Revenue Data Yet
+                          </h6>
+                          <p className="small text-muted mb-0">
+                            Complete your first order to see analytics!
+                          </p>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={revenueLineData}
+                            margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                          >
+                            <Line
+                              type="monotone"
+                              dataKey="Revenue"
+                              stroke="#0d6efd"
+                              strokeWidth={3}
+                              dot={{ r: 5, fill: "#0d6efd" }}
+                              activeDot={{ r: 8 }}
+                            />
+                            <XAxis
+                              dataKey="name"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: "#6c757d" }}
+                              dy={10}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: "#6c757d" }}
+                              tickFormatter={(val) => `₹${val}`}
+                              dx={-10}
+                            />
+                            <Tooltip
+                              cursor={{ stroke: "#e9ecef", strokeWidth: 2 }}
+                              contentStyle={{
+                                borderRadius: "10px",
+                                border: "none",
+                                boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
+                              }}
+                              formatter={(value) => [`₹${value}`, "Revenue"]}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
                 </div>
-                <div className="col-md-6">
-                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4 d-flex flex-row align-items-center justify-content-between premium-hover transition-all">
-                    <div>
-                      <h6
-                        className="text-secondary fw-semibold mb-1 text-uppercase"
-                        style={{ fontSize: "0.8rem" }}
-                      >
-                        Total Expenses
-                      </h6>
-                      <h3 className="fw-bold text-danger mb-0">
-                        ₹{dashboardStats.totalExpenses}
-                      </h3>
-                    </div>
-                    <div
-                      className="bg-danger bg-opacity-10 text-danger rounded-circle d-flex justify-content-center align-items-center"
-                      style={{ width: "60px", height: "60px" }}
-                    >
-                      <i className="bi bi-graph-down-arrow fs-3"></i>
+                <div className="col-lg-4">
+                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4">
+                    <h6 className="fw-bold text-dark mb-4">
+                      Expense Distribution
+                    </h6>
+                    <div style={{ height: "250px", width: "100%" }}>
+                      {expensePieData.length === 0 ? (
+                        <div className="d-flex flex-column justify-content-center align-items-center h-100 bg-light rounded-4 border border-dashed">
+                          <i
+                            className="bi bi-pie-chart text-muted mb-2"
+                            style={{ fontSize: "2rem" }}
+                          ></i>
+                          <h6 className="fw-bold text-secondary mb-1">
+                            No Expenses Logged
+                          </h6>
+                          <p className="small text-muted mb-0">
+                            Add expenses to see breakdown!
+                          </p>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={expensePieData}
+                              innerRadius={60}
+                              outerRadius={90}
+                              paddingAngle={5}
+                              dataKey="value"
+                            >
+                              {expensePieData.map((entry, index) => (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={COLORS[index % COLORS.length]}
+                                />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                borderRadius: "10px",
+                                border: "none",
+                                boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
+                              }}
+                              formatter={(value) => [`₹${value}`, "Amount"]}
+                            />
+                            <Legend
+                              verticalAlign="bottom"
+                              height={36}
+                              iconType="circle"
+                              wrapperStyle={{ fontSize: "12px" }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
                     </div>
                   </div>
                 </div>
               </div>
 
-              <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+              {/* EXPENSE LEDGER */}
+              <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden mt-4">
                 <div className="card-header bg-white border-bottom p-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
                   <h5 className="fw-bold text-dark mb-0">Expense Ledger</h5>
                   <button
@@ -2570,7 +3362,7 @@ export default function MyDhobhiGhatApp() {
           to { opacity: 1; transform: translateX(0); }
         }
 
-        .border-dashed { border-top-style: dashed !important; border-top-width: 2px !important; border-color: #dee2e6 !important; }
+        .border-dashed { border-style: dashed !important; border-width: 2px !important; border-color: #dee2e6 !important; }
 
         .payment-card { transition: all 0.2s ease; border: 2px solid transparent; }
         .payment-card.active { border-color: #0d6efd; background-color: rgba(13, 110, 253, 0.05) !important; }

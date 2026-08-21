@@ -10,7 +10,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
 
-  const handleAuth = async (e) => {
+  const handleAuth = async (e: any) => {
     e.preventDefault();
     setLoading(true);
 
@@ -150,7 +150,7 @@ export default function LoginPage() {
           }}
         >
           <h3 className="fw-bold mb-2">
-            <i className="bi bi-droplet-half me-2"></i>MyDhobhiGhat
+            <i className="bi bi-droplet-half me-2"></i>Laundry ERP
           </h3>
           <p className="text-white-50 small mb-0">
             Streamline your laundry workflow, orders, and business operations
