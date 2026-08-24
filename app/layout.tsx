@@ -3,7 +3,7 @@ import "bootstrap-icons/font/bootstrap-icons.css";
 import BootstrapClient from "./components/BootstrapClient";
 
 export const metadata = {
-  title: "My Dhobi Ghat | Premium Laundry Services",
+  title: "Seema Laundry Services",
   description:
     "Fresh clothes, hassle free. Premium cleaning and fast delivery at your doorstep.",
 };
