@@ -8,7 +8,8 @@ import {
 } from 'recharts';
 
 export default function LaundryERPApp() {
-  // Loading State
+  // Hydration & Loading States
+  const [isMounted, setIsMounted] = useState<boolean>(false);
   const [isAppLoading, setIsAppLoading] = useState<boolean>(true);
   
   const [activeSection, setActiveSection] = useState<string>('dashboard');
@@ -75,6 +76,11 @@ export default function LaundryERPApp() {
   // Graph Colors
   const COLORS = ['#0d6efd', '#198754', '#fd7e14', '#dc3545', '#6f42c1', '#20c997'];
 
+  // Prevent Hydration Mismatch
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   // Responsive Check
   useEffect(() => {
     const handleResize = () => {
@@ -140,8 +146,14 @@ export default function LaundryERPApp() {
         setClothCatalog(fetchedServices);
       }
 
-      // Fetch Orders
-      const { data: orders } = await supabase.from('laundry_orders').select('*').order('created_at', { ascending: false });
+      // SECURE FETCH: Users only fetch THEIR orders, Admins/Managers fetch ALL orders
+      let ordersQuery = supabase.from('laundry_orders').select('*').order('created_at', { ascending: false });
+      
+      if (profile?.role === 'user') {
+        ordersQuery = ordersQuery.eq('customer_name', profile.full_name);
+      }
+
+      const { data: orders } = await ordersQuery;
       if (orders) {
         setOrdersList(orders);
         updateDashboardStats(orders);
@@ -230,16 +242,17 @@ export default function LaundryERPApp() {
     }, ...prev]);
   };
 
-  // ================= REAL-TIME LISTENERS =================
+  // ================= SECURE REAL-TIME LISTENERS =================
   useEffect(() => {
     if (!userProfile) return;
 
     const channel = supabase
       .channel('realtime:public:laundry_orders')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'laundry_orders' }, (payload: any) => {
-        setOrdersList((prev: any[]) => [payload.new, ...prev]);
-
+        
         if (userProfile.role === 'admin' || userProfile.role === 'manager') {
+          // Admins & Managers see ALL orders
+          setOrdersList((prev: any[]) => [payload.new, ...prev]);
           playNotificationSound(); 
           const msg = `New order #${payload.new.order_id} placed by ${payload.new.customer_name}!`;
           addNotification(msg);
@@ -268,12 +281,21 @@ export default function LaundryERPApp() {
             allowOutsideClick: false,
             backdrop: `rgba(0,0,0,0.85)`
           });
+        } else if (userProfile.role === 'user' && payload.new.customer_name === userProfile.full_name) {
+          // Users ONLY see their own new orders (e.g. if they place an order from another device)
+          setOrdersList((prev: any[]) => [payload.new, ...prev]);
         }
+
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'laundry_orders' }, (payload: any) => {
-        setOrdersList((prev: any[]) => prev.map(o => o.order_id === payload.new.order_id ? payload.new : o));
+        
+        if (userProfile.role === 'admin' || userProfile.role === 'manager') {
+          // Admins & Managers update ALL orders
+          setOrdersList((prev: any[]) => prev.map(o => o.order_id === payload.new.order_id ? payload.new : o));
+        } else if (userProfile.role === 'user' && payload.new.customer_name === userProfile.full_name) {
+          // Users ONLY process updates for their own orders
+          setOrdersList((prev: any[]) => prev.map(o => o.order_id === payload.new.order_id ? payload.new : o));
 
-        if (userProfile.role === 'user' && payload.new.customer_name === userProfile.full_name) {
           if (payload.old.status !== payload.new.status) {
             playNotificationSound();
             let msg = `Your order id: #${payload.new.order_id} status has been updated to ${payload.new.status}!`;
@@ -732,6 +754,8 @@ export default function LaundryERPApp() {
   const expensePieData = getExpensePieData();
 
   // ================= SAFE INITIAL RENDER (MATCHES SSR 100%) =================
+  if (!isMounted) return null;
+
   if (isAppLoading) {
     return (
       <div className="d-flex flex-column w-100 vh-100 justify-content-center align-items-center" style={{ backgroundColor: '#F8F9FB' }}>
@@ -1138,7 +1162,9 @@ export default function LaundryERPApp() {
              <div className="d-none d-xl-flex align-items-center gap-3 border-end pe-3 me-1">
                <a href="/tos" className="text-secondary text-decoration-none small hover-primary transition-all" style={{fontSize: '0.75rem', fontWeight: '500'}}>Terms of Service</a>
                <a href="/pp" className="text-secondary text-decoration-none small hover-primary transition-all" style={{fontSize: '0.75rem', fontWeight: '500'}}>Privacy Policy</a>
-             
+               {userProfile?.role === 'user' && (
+                 <a href="/tos" className="text-secondary text-decoration-none small hover-primary transition-all" style={{fontSize: '0.75rem', fontWeight: '500'}}>Refund Policy</a>
+               )}
              </div>
 
              {/* Date Pill */}
