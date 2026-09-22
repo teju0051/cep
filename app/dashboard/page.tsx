@@ -1,0 +1,3411 @@
+"use client";
+import React, { useState, useEffect, useRef } from "react";
+import Swal from "sweetalert2";
+import { supabase } from "../lib/supabaseClient";
+import {
+  LineChart,
+  Line,
+  PieChart,
+  Pie,
+  Cell,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from "recharts";
+
+export default function LaundryERPApp() {
+  const [isMounted, setIsMounted] = useState<boolean>(false);
+  const [isAppLoading, setIsAppLoading] = useState<boolean>(true);
+
+  const [activeSection, setActiveSection] = useState<string>("dashboard");
+
+  // UI States
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
+  const [isMobile, setIsMobile] = useState<boolean>(false);
+  const [isProfilePopupOpen, setIsProfilePopupOpen] = useState<boolean>(false);
+  const [isNotificationOpen, setIsNotificationOpen] = useState<boolean>(false);
+  const [currentTime, setCurrentTime] = useState<any>(null);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [userProfile, setUserProfile] = useState<any>(null);
+
+  // Search & Filter States
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>("All");
+
+  // Popups & Modals
+  const [selectedCustomerProfile, setSelectedCustomerProfile] =
+    useState<any>(null);
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [isOnboardingOpen, setIsOnboardingOpen] = useState<boolean>(false);
+  const [isSalaryVisible, setIsSalaryVisible] = useState<boolean>(false);
+  const [isAddStaffModalOpen, setIsAddStaffModalOpen] =
+    useState<boolean>(false);
+  const [isAddExpenseModalOpen, setIsAddExpenseModalOpen] =
+    useState<boolean>(false);
+  const [isAddStockModalOpen, setIsAddStockModalOpen] =
+    useState<boolean>(false);
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState<boolean>(false);
+  const [editingServiceId, setEditingServiceId] = useState<any>(null);
+
+  // Form States
+  const [onboardingData, setOnboardingData] = useState<any>({
+    name: "",
+    phone: "",
+    address: "",
+  });
+  const [newStaff, setNewStaff] = useState<any>({
+    name: "",
+    designation: "",
+    salary: "",
+  });
+  const [newExpense, setNewExpense] = useState<any>({
+    category: "",
+    description: "",
+    amount: "",
+  });
+  const [newStock, setNewStock] = useState<any>({
+    name: "",
+    quantity: "",
+    unit: "kg",
+    price: "",
+  });
+  const [serviceForm, setServiceForm] = useState<any>({ name: "", price: "" });
+
+  // Data States
+  const [clothCatalog, setClothCatalog] = useState<any[]>([]);
+  const [cart, setCart] = useState<any[]>([]);
+  const [paymentMethod, setPaymentMethod] = useState<string>("Cod");
+  const [dashboardStats, setDashboardStats] = useState<any>({
+    totalOrders: 0,
+    revenue: 0,
+    pendingPickups: 0,
+    delivery: 0,
+    totalExpenses: 0,
+    todayRev: 0,
+    todayOrders: 0,
+    monthRev: 0,
+    monthOrders: 0,
+    yearRev: 0,
+    yearOrders: 0,
+  });
+  const [ordersList, setOrdersList] = useState<any[]>([]);
+  const [payrollList, setPayrollList] = useState<any[]>([]);
+  const [reportsList, setReportsList] = useState<any[]>([]);
+  const [stocksList, setStocksList] = useState<any[]>([]);
+
+  // --- ARYA AI STATES & REFS ---
+  const [aryaState, setAryaState] = useState<
+    "dormant" | "listening" | "processing"
+  >("dormant");
+  const aryaStateRef = useRef(aryaState);
+  const recognitionRef = useRef<any>(null);
+  const stocksRef = useRef<any[]>(stocksList);
+  const ordersRef = useRef<any[]>(ordersList);
+  const reportsRef = useRef<any[]>(reportsList);
+
+  useEffect(() => {
+    aryaStateRef.current = aryaState;
+  }, [aryaState]);
+  useEffect(() => {
+    stocksRef.current = stocksList;
+  }, [stocksList]);
+  useEffect(() => {
+    ordersRef.current = ordersList;
+  }, [ordersList]);
+  useEffect(() => {
+    reportsRef.current = reportsList;
+  }, [reportsList]);
+
+  const COLORS = [
+    "#0d6efd",
+    "#198754",
+    "#fd7e14",
+    "#dc3545",
+    "#6f42c1",
+    "#20c997",
+  ];
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  useEffect(() => {
+    const handleResize = () => {
+      const mobile = window.innerWidth < 992;
+      setIsMobile(mobile);
+      if (mobile) setIsSidebarCollapsed(true);
+      else setIsSidebarCollapsed(false);
+    };
+    handleResize();
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
+
+  // Live Clock Effect
+  useEffect(() => {
+    setCurrentTime(new Date());
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    const initApp = async () => {
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
+      if (error || !session) {
+        window.location.href = "/login";
+        return;
+      }
+      setCurrentUser(session.user);
+
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", session.user.id)
+        .maybeSingle();
+      if (profile) {
+        setUserProfile(profile);
+        if (
+          profile.role === "user" &&
+          (!profile.full_name || !profile.phone || !profile.address)
+        ) {
+          setOnboardingData({
+            name: profile.full_name || "",
+            phone: profile.phone || "",
+            address: profile.address || "",
+          });
+          setIsOnboardingOpen(true);
+        }
+      } else {
+        await supabase
+          .from("profiles")
+          .insert([
+            { id: session.user.id, role: "user", is_first_login: true },
+          ]);
+        setIsOnboardingOpen(true);
+      }
+
+      const { data: fetchedServices } = await supabase
+        .from("laundry_services")
+        .select("*")
+        .order("created_at", { ascending: true });
+      if (fetchedServices && fetchedServices.length > 0)
+        setClothCatalog(fetchedServices);
+
+      let ordersQuery = supabase
+        .from("laundry_orders")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (profile?.role === "user")
+        ordersQuery = ordersQuery.eq("customer_name", profile.full_name);
+
+      const { data: orders } = await ordersQuery;
+      if (orders) {
+        setOrdersList(orders);
+        updateDashboardStats(orders);
+      }
+
+      if (profile?.role === "admin" || profile?.role === "manager") {
+        if (profile?.role === "admin") {
+          const { data: payroll } = await supabase
+            .from("staff_payroll")
+            .select("*")
+            .order("created_at", { ascending: false });
+          if (payroll) setPayrollList(payroll);
+        }
+        const { data: expenses } = await supabase
+          .from("business_expenses")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (expenses) {
+          setReportsList(expenses);
+          setDashboardStats((prev: any) => ({
+            ...prev,
+            totalExpenses: expenses.reduce(
+              (sum: any, exp: any) => sum + parseFloat(exp.amount),
+              0,
+            ),
+          }));
+        }
+        const { data: stocks } = await supabase
+          .from("inventory_stocks")
+          .select("*")
+          .order("created_at", { ascending: false });
+        if (stocks) setStocksList(stocks);
+      }
+      setTimeout(() => {
+        setIsAppLoading(false);
+      }, 2000);
+    };
+    initApp();
+  }, []);
+
+  const updateDashboardStats = (orders: any[]) => {
+    const now = new Date();
+    const todayStr = now.toISOString().split("T")[0];
+    const monthStr = now.toISOString().slice(0, 7);
+    const yearStr = now.getFullYear().toString();
+
+    let revToday = 0,
+      revMonth = 0,
+      revYear = 0,
+      totalRev = 0;
+    let ordToday = 0,
+      ordMonth = 0,
+      ordYear = 0;
+
+    orders.forEach((o: any) => {
+      if (o.status !== "Rejected") {
+        const amt = parseFloat(o.total_amount) || 0;
+        totalRev += amt;
+        if (o.created_at) {
+          const d = new Date(o.created_at);
+          if (d.toISOString().split("T")[0] === todayStr) {
+            revToday += amt;
+            ordToday++;
+          }
+          if (d.toISOString().slice(0, 7) === monthStr) {
+            revMonth += amt;
+            ordMonth++;
+          }
+          if (d.getFullYear().toString() === yearStr) {
+            revYear += amt;
+            ordYear++;
+          }
+        }
+      }
+    });
+
+    setDashboardStats((prev: any) => ({
+      ...prev,
+      totalOrders: orders.length,
+      revenue: totalRev,
+      pendingPickups: orders.filter(
+        (o: any) => o.status === "Pickup" || o.status === "Received",
+      ).length,
+      delivery: orders.filter((o: any) => o.status === "Out for Delivery")
+        .length,
+      todayRev: revToday,
+      todayOrders: ordToday,
+      monthRev: revMonth,
+      monthOrders: ordMonth,
+      yearRev: revYear,
+      yearOrders: ordYear,
+    }));
+  };
+
+  const playNotificationSound = () => {
+    const audioEl = document.getElementById(
+      "notificationSound",
+    ) as HTMLAudioElement;
+    if (audioEl) {
+      audioEl.currentTime = 0;
+      audioEl.play().catch(() => {});
+    }
+  };
+
+  const addNotification = (message: string) => {
+    setNotifications((prev: any[]) => [
+      {
+        id: Date.now() + Math.random(),
+        message,
+        timestamp: new Date().toLocaleTimeString("en-IN", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+        read: false,
+      },
+      ...prev,
+    ]);
+  };
+
+  const handleOrderStatusUpdate = async (orderId: any, newStatus: any) => {
+    if (newStatus === "Rejected") {
+      const { value: formValues, isDismissed } = await Swal.fire({
+        title: "Reject Order",
+        html: `
+          <div class="text-start">
+            <select id="swal-reject-reason" class="form-select bg-light mb-3">
+              <option value="">-- No predefined reason (Write below) --</option>
+              <option value="Shop operation hours are over">Shop operation hours are over</option>
+              <option value="Store is full">Store is full</option>
+            </select>
+            <textarea id="swal-reject-manual" class="form-control bg-light" rows="3" placeholder="Type custom reason here..."></textarea>
+          </div>
+        `,
+        focusConfirm: false,
+        showCancelButton: true,
+        confirmButtonText: "Confirm Rejection",
+        confirmButtonColor: "#dc3545",
+        preConfirm: () => {
+          const selectReason = (
+            document.getElementById("swal-reject-reason") as HTMLSelectElement
+          ).value;
+          const manualReason = (
+            document.getElementById("swal-reject-manual") as HTMLTextAreaElement
+          ).value.trim();
+          if (!selectReason && !manualReason) {
+            Swal.showValidationMessage("Required.");
+            return false;
+          }
+          return selectReason ? selectReason : manualReason;
+        },
+      });
+      if (isDismissed) {
+        setOrdersList([...ordersList]);
+        return;
+      }
+      const { error } = await supabase
+        .from("laundry_orders")
+        .update({ status: "Rejected", rejection_reason: formValues })
+        .eq("order_id", orderId);
+      if (error) Swal.fire("Database Error", error.message, "error");
+    } else {
+      const { error } = await supabase
+        .from("laundry_orders")
+        .update({ status: newStatus, rejection_reason: null })
+        .eq("order_id", orderId);
+      if (error) Swal.fire("Database Error", error.message, "error");
+    }
+  };
+
+  useEffect(() => {
+    if (!userProfile) return;
+    const channel = supabase
+      .channel("realtime:public:laundry_orders")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "laundry_orders" },
+        (payload: any) => {
+          if (userProfile.role === "admin" || userProfile.role === "manager") {
+            setOrdersList((prev: any[]) => [payload.new, ...prev]);
+            playNotificationSound();
+            addNotification(
+              `New order #${payload.new.order_id} placed by ${payload.new.customer_name}!`,
+            );
+            Swal.fire({
+              title: "🚨 NEW ORDER ALERT! 🚨",
+              html: `<div class="text-start bg-light p-4 rounded-3 mt-3 shadow-sm border"><h5 class="fw-bold text-primary">Order ID: #${payload.new.order_id}</h5><p><strong>Name:</strong> ${payload.new.customer_name}</p></div>`,
+              toast: true,
+              position: "top-end",
+              showConfirmButton: false,
+              timer: 5000,
+            });
+          } else if (
+            userProfile.role === "user" &&
+            payload.new.customer_name === userProfile.full_name
+          ) {
+            setOrdersList((prev: any[]) => [payload.new, ...prev]);
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "laundry_orders" },
+        (payload: any) => {
+          if (userProfile.role === "admin" || userProfile.role === "manager") {
+            setOrdersList((prev: any[]) =>
+              prev.map((o) =>
+                o.order_id === payload.new.order_id ? payload.new : o,
+              ),
+            );
+          } else if (
+            userProfile.role === "user" &&
+            payload.new.customer_name === userProfile.full_name
+          ) {
+            setOrdersList((prev: any[]) =>
+              prev.map((o) =>
+                o.order_id === payload.new.order_id ? payload.new : o,
+              ),
+            );
+            if (payload.old.status !== payload.new.status) {
+              playNotificationSound();
+              let msg = `Your order id: #${payload.new.order_id} status has been updated to ${payload.new.status}!`;
+              addNotification(msg);
+              Swal.fire({
+                title: "Order Update",
+                text: msg,
+                icon: "success",
+                toast: true,
+                position: "top-end",
+                showConfirmButton: false,
+                timer: 6000,
+              });
+            }
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [userProfile]);
+
+  useEffect(() => {
+    updateDashboardStats(ordersList);
+  }, [ordersList]);
+
+  // ================= ARYA "HEY GOOGLE" WAKE WORD LISTENER =================
+  const playWakeChime = () => {
+    try {
+      const AudioContext =
+        window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(800, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1200, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0, ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.2, ctx.currentTime + 0.05);
+      gain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {
+      console.error("Audio block", e);
+    }
+  };
+
+  const speakWithMicSuppression = (
+    text: string,
+    onEndCallback?: () => void,
+  ) => {
+    try {
+      if (recognitionRef.current) {
+        recognitionRef.current.abort();
+      }
+    } catch (e) {}
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.onend = () => {
+      if (onEndCallback) onEndCallback();
+      if (userProfile?.role === "admin" && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {}
+      }
+    };
+    utterance.onerror = () => {
+      if (userProfile?.role === "admin" && recognitionRef.current) {
+        try {
+          recognitionRef.current.start();
+        } catch (e) {}
+      }
+    };
+    window.speechSynthesis.speak(utterance);
+  };
+
+  useEffect(() => {
+    if (userProfile?.role !== "admin") return;
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition ||
+      (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) return;
+
+    const recognition = new SpeechRecognition();
+    recognition.continuous = true;
+    recognition.interimResults = false;
+    recognition.lang = "en-IN";
+    recognitionRef.current = recognition;
+
+    const executeAryaCommand = async (commandString: string) => {
+      setAryaState("processing");
+      const inventoryContext = stocksRef.current.map((s) => ({
+        item: s.item_name,
+        qty: `${s.quantity} ${s.unit}`,
+      }));
+      const ordersContext = ordersRef.current
+        .slice(0, 10)
+        .map((o) => ({
+          id: o.order_id,
+          customer: o.customer_name,
+          status: o.status,
+        }));
+      const reportsContext = reportsRef.current
+        .slice(0, 10)
+        .map((r) => ({ category: r.category, amount: r.amount }));
+
+      try {
+        const response = await fetch("/api/arya", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            command: commandString,
+            inventoryContext,
+            ordersContext,
+            reportsContext,
+          }),
+        });
+
+        const data = await response.json();
+
+        speakWithMicSuppression(data.message, () => {
+          setAryaState("dormant");
+        });
+
+        // Map AI Tools to Supabase Actions
+        if (data.action === "UPDATE_ORDER") {
+          handleOrderStatusUpdate(Number(data.orderId), data.newStatus);
+        } else if (data.action === "NAVIGATE") {
+          setActiveSection(data.section);
+        } else if (data.action === "ADD_INVENTORY") {
+          const { data: newStock, error } = await supabase
+            .from("inventory_stocks")
+            .insert([
+              {
+                item_name: data.item.itemName,
+                quantity: data.item.quantity,
+                unit: data.item.unit,
+                price_per_unit: data.item.price,
+              },
+            ])
+            .select();
+          if (!error && newStock) {
+            setStocksList((prev: any[]) => [newStock[0], ...prev]);
+            Swal.fire({
+              icon: "success",
+              title: "Stock Added via Voice!",
+              toast: true,
+              position: "top-end",
+              showConfirmButton: false,
+              timer: 3000,
+            });
+          }
+        } else if (data.action === "ADD_EXPENSE") {
+          const { data: newExp, error } = await supabase
+            .from("business_expenses")
+            .insert([
+              {
+                category: data.expense.category,
+                description: data.expense.description,
+                amount: data.expense.amount,
+              },
+            ])
+            .select();
+          if (!error && newExp) {
+            setReportsList((prev: any[]) => [newExp[0], ...prev]);
+            Swal.fire({
+              icon: "success",
+              title: "Expense Logged via Voice!",
+              toast: true,
+              position: "top-end",
+              showConfirmButton: false,
+              timer: 3000,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Arya API Error:", error);
+        setAryaState("dormant");
+      }
+    };
+
+    recognition.onresult = async (event: any) => {
+      const transcript = event.results[event.results.length - 1][0].transcript
+        .toLowerCase()
+        .trim();
+      const saidArya =
+        transcript.includes("arya") ||
+        transcript.includes("aria") ||
+        transcript.includes("aarya");
+
+      if (aryaStateRef.current === "dormant") {
+        if (saidArya) {
+          playWakeChime();
+          const wakeWordUsed = [
+            "hey arya",
+            "hey aria",
+            "hey aarya",
+            "arya",
+            "aria",
+            "aarya",
+          ].find((w) => transcript.includes(w));
+          const commandAfterWake = wakeWordUsed
+            ? transcript.split(wakeWordUsed)[1]?.trim()
+            : "";
+
+          if (commandAfterWake && commandAfterWake.length > 3) {
+            executeAryaCommand(commandAfterWake);
+          } else {
+            setAryaState("listening");
+            speakWithMicSuppression("I am listening.");
+          }
+        }
+      } else if (aryaStateRef.current === "listening") {
+        executeAryaCommand(transcript);
+      }
+    };
+
+    recognition.onend = () => {
+      if (
+        userProfile?.role === "admin" &&
+        aryaStateRef.current !== "processing"
+      ) {
+        setTimeout(() => {
+          try {
+            recognition.start();
+          } catch (e) {}
+        }, 1000);
+      }
+    };
+
+    try {
+      recognition.start();
+    } catch (e) {}
+    return () => {
+      try {
+        recognition.stop();
+      } catch (e) {}
+    };
+  }, [userProfile?.role]);
+
+  // ================= UTILITY FUNCTIONS =================
+  const handleExportPDF = () => window.print();
+
+  const handleContactSupport = () => {
+    Swal.fire({
+      title: "Support",
+      html: `<div class="text-start mt-3 bg-light p-3 rounded-3 border"><p class="mb-2"><strong>WhatsApp:</strong> +91 7738342274</p></div>`,
+      icon: "info",
+      confirmButtonText: "Close",
+      confirmButtonColor: "#0d6efd",
+    });
+  };
+
+  const handleUnlockSalary = () => {
+    if (isSalaryVisible) {
+      setIsSalaryVisible(false);
+      return;
+    }
+    Swal.fire({
+      title: "Enter Admin Password",
+      input: "password",
+      showCancelButton: true,
+      confirmButtonText: "Unlock",
+      confirmButtonColor: "#0d6efd",
+    }).then((result: any) => {
+      if (result.isConfirmed && result.value === "123456")
+        setIsSalaryVisible(true);
+      else if (result.isConfirmed)
+        Swal.fire({
+          icon: "error",
+          title: "Incorrect Password",
+          confirmButtonColor: "#0a1128",
+        });
+    });
+  };
+
+  const handleUpdateSalary = async (
+    staffId: any,
+    currentSalary: any,
+    staffName: any,
+  ) => {
+    const { value: newSalary } = await Swal.fire({
+      title: `Update Salary`,
+      input: "number",
+      inputValue: currentSalary,
+      showCancelButton: true,
+      confirmButtonText: "Save",
+    });
+    if (newSalary) {
+      const { error } = await supabase
+        .from("staff_payroll")
+        .update({ monthly_salary: parseFloat(newSalary) })
+        .eq("staff_id", staffId);
+      if (!error) {
+        setPayrollList((prev: any[]) =>
+          prev.map((s) =>
+            s.staff_id === staffId ? { ...s, monthly_salary: newSalary } : s,
+          ),
+        );
+        Swal.fire({
+          icon: "success",
+          title: "Salary Updated!",
+          showConfirmButton: false,
+          timer: 1500,
+        });
+      }
+    }
+  };
+
+  const handleOnboardingSubmit = async (e: any) => {
+    e.preventDefault();
+    if (!currentUser) return;
+    const { error } = await supabase
+      .from("profiles")
+      .update({
+        full_name: onboardingData.name,
+        phone: onboardingData.phone,
+        address: onboardingData.address,
+        is_first_login: false,
+      })
+      .eq("id", currentUser.id);
+    if (!error) {
+      setUserProfile((prev: any) => ({
+        ...prev,
+        full_name: onboardingData.name,
+        phone: onboardingData.phone,
+        address: onboardingData.address,
+        is_first_login: false,
+      }));
+      setIsOnboardingOpen(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    setIsProfilePopupOpen(false);
+    await supabase.auth.signOut();
+    window.location.href = "/login";
+  };
+
+  const addToCart = (item: any) => {
+    const existing = cart.find((c) => c.service_id === item.service_id);
+    if (existing)
+      setCart(
+        cart.map((c) =>
+          c.service_id === item.service_id ? { ...c, qty: c.qty + 1 } : c,
+        ),
+      );
+    else setCart([...cart, { ...item, qty: 1 }]);
+  };
+  const removeFromCart = (id: any) =>
+    setCart(cart.filter((c) => c.service_id !== id));
+  const calculateCartTotal = () =>
+    cart.reduce((sum: any, item: any) => sum + item.price * item.qty, 0);
+
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (typeof window !== "undefined" && (window as any).Razorpay)
+        return resolve(true);
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  const handleCheckout = async () => {
+    if (cart.length === 0)
+      return Swal.fire(
+        "Empty Cart",
+        "Please add items before placing an order.",
+        "warning",
+      );
+    const totalAmount = calculateCartTotal();
+    const orderDetailsSummary = cart
+      .map((c: any) => `${c.name} (x${c.qty})`)
+      .join(", ");
+
+    if (paymentMethod === "Online") {
+      const res = await loadRazorpayScript();
+      if (!res) return Swal.fire("Error", "Razorpay failed to load.", "error");
+      const options = {
+        key: "rzp_live_TTaH03kARMoEdZ",
+        amount: totalAmount * 100,
+        currency: "INR",
+        name: "Seema Laundry Services",
+        description: "Order Payment",
+        handler: async function (response: any) {
+          const { data, error } = await supabase
+            .from("laundry_orders")
+            .insert([
+              {
+                customer_name: userProfile?.full_name || "Customer",
+                customer_phone: userProfile?.phone || "N/A",
+                location: userProfile?.address || "Main Location",
+                service_type: `${orderDetailsSummary} [Paid via Razorpay: ${response.razorpay_payment_id}]`,
+                total_amount: totalAmount,
+                status: "Received",
+                rejection_reason: null,
+              },
+            ])
+            .select();
+          if (!error && data) {
+            setCart([]);
+            Swal.fire(
+              "Success",
+              `Order #${data[0].order_id} Placed!`,
+              "success",
+            );
+            setActiveSection("dashboard");
+          }
+        },
+        prefill: {
+          name: userProfile?.full_name || "",
+          contact: userProfile?.phone || "",
+        },
+        theme: { color: "#0d6efd" },
+      };
+      new (window as any).Razorpay(options).open();
+    } else {
+      const { data, error } = await supabase
+        .from("laundry_orders")
+        .insert([
+          {
+            customer_name: userProfile?.full_name || "Customer",
+            customer_phone: userProfile?.phone || "N/A",
+            location: userProfile?.address || "Main Location",
+            service_type: `${orderDetailsSummary} [Pay on Delivery]`,
+            total_amount: totalAmount,
+            status: "Pickup",
+            rejection_reason: null,
+          },
+        ])
+        .select();
+      if (!error && data) {
+        setCart([]);
+        Swal.fire({
+          icon: "success",
+          title: "Order Placed!",
+          text: `Order ID #${data[0].order_id}`,
+          timer: 2500,
+          showConfirmButton: false,
+        });
+        setActiveSection("dashboard");
+      }
+    }
+  };
+
+  const handleAddStaffSubmit = async (e: any) => {
+    e.preventDefault();
+    const { data, error } = await supabase
+      .from("staff_payroll")
+      .insert([
+        {
+          staff_name: newStaff.name,
+          designation: newStaff.designation,
+          monthly_salary: parseFloat(newStaff.salary),
+          status: "Pending",
+        },
+      ])
+      .select();
+    if (!error && data) {
+      setPayrollList((prev: any[]) => [data[0], ...prev]);
+      setNewStaff({ name: "", designation: "", salary: "" });
+      setIsAddStaffModalOpen(false);
+      Swal.fire({
+        icon: "success",
+        title: "Staff Added!",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    }
+  };
+
+  const handleAddExpenseSubmit = async (e: any) => {
+    e.preventDefault();
+    const { data, error } = await supabase
+      .from("business_expenses")
+      .insert([
+        {
+          category: newExpense.category,
+          description: newExpense.description,
+          amount: parseFloat(newExpense.amount),
+        },
+      ])
+      .select();
+    if (!error && data) {
+      setReportsList((prev: any[]) => [data[0], ...prev]);
+      setNewExpense({ category: "", description: "", amount: "" });
+      setIsAddExpenseModalOpen(false);
+      Swal.fire({
+        icon: "success",
+        title: "Expense Logged!",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    }
+  };
+
+  const handleAddStockSubmit = async (e: any) => {
+    e.preventDefault();
+    const { data, error } = await supabase
+      .from("inventory_stocks")
+      .insert([
+        {
+          item_name: newStock.name,
+          quantity: parseFloat(newStock.quantity),
+          unit: newStock.unit,
+          price_per_unit: parseFloat(newStock.price),
+        },
+      ])
+      .select();
+    if (!error && data) {
+      setStocksList((prev: any[]) => [data[0], ...prev]);
+      setNewStock({ name: "", quantity: "", unit: "kg", price: "" });
+      setIsAddStockModalOpen(false);
+      Swal.fire({
+        icon: "success",
+        title: "Stock Added!",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    }
+  };
+
+  const handleDeleteStock = async (stockId: any) => {
+    const { isConfirmed } = await Swal.fire({
+      title: "Are you sure?",
+      text: "You are about to delete this stock item.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#dc3545",
+      confirmButtonText: "Yes, delete it!",
+    });
+    if (isConfirmed) {
+      const { error } = await supabase
+        .from("inventory_stocks")
+        .delete()
+        .eq("stock_id", stockId);
+      if (!error) {
+        setStocksList(stocksList.filter((s: any) => s.stock_id !== stockId));
+        Swal.fire({
+          icon: "success",
+          title: "Deleted!",
+          showConfirmButton: false,
+          timer: 1000,
+        });
+      }
+    }
+  };
+
+  const openAddServiceModal = () => {
+    setEditingServiceId(null);
+    setServiceForm({ name: "", price: "" });
+    setIsServiceModalOpen(true);
+  };
+  const openEditServiceModal = (service: any) => {
+    setEditingServiceId(service.service_id);
+    setServiceForm({ name: service.name, price: service.price });
+    setIsServiceModalOpen(true);
+  };
+
+  const handleSaveServiceSubmit = async (e: any) => {
+    e.preventDefault();
+    if (editingServiceId) {
+      const { data, error } = await supabase
+        .from("laundry_services")
+        .update({
+          name: serviceForm.name,
+          price: parseFloat(serviceForm.price),
+        })
+        .eq("service_id", editingServiceId)
+        .select();
+      if (!error && data) {
+        setClothCatalog((prev: any[]) =>
+          prev.map((s: any) =>
+            s.service_id === editingServiceId ? data[0] : s,
+          ),
+        );
+        setIsServiceModalOpen(false);
+        Swal.fire({
+          icon: "success",
+          title: "Updated!",
+          showConfirmButton: false,
+          timer: 1500,
+        });
+      }
+    } else {
+      const { data, error } = await supabase
+        .from("laundry_services")
+        .insert([
+          { name: serviceForm.name, price: parseFloat(serviceForm.price) },
+        ])
+        .select();
+      if (!error && data) {
+        setClothCatalog((prev: any[]) => [...prev, data[0]]);
+        setIsServiceModalOpen(false);
+        Swal.fire({
+          icon: "success",
+          title: "Added!",
+          showConfirmButton: false,
+          timer: 1500,
+        });
+      }
+    }
+  };
+
+  const handleDeleteService = async (serviceId: any) => {
+    const { isConfirmed } = await Swal.fire({
+      title: "Delete Service?",
+      text: "This removes it from the catalog.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#dc3545",
+      confirmButtonText: "Yes, remove it!",
+    });
+    if (isConfirmed) {
+      const { error } = await supabase
+        .from("laundry_services")
+        .delete()
+        .eq("service_id", serviceId);
+      if (!error) {
+        setClothCatalog(
+          clothCatalog.filter((s: any) => s.service_id !== serviceId),
+        );
+        Swal.fire({
+          icon: "success",
+          title: "Deleted!",
+          showConfirmButton: false,
+          timer: 1000,
+        });
+      }
+    }
+  };
+
+  const markAllNotificationsRead = () => {
+    setNotifications((prev: any[]) =>
+      prev.map((n: any) => ({ ...n, read: true })),
+    );
+    setIsNotificationOpen(!isNotificationOpen);
+  };
+  const unreadCount = notifications.filter((n: any) => !n.read).length;
+
+  const sidebarWidth = isMobile
+    ? "260px"
+    : isSidebarCollapsed
+      ? "80px"
+      : "260px";
+
+  const getOrderStatusStyle = (status: any) => {
+    switch (status) {
+      case "Pickup":
+        return "bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25";
+      case "Received":
+        return "bg-info bg-opacity-10 text-info border border-info border-opacity-25";
+      case "In Progress":
+        return "bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25";
+      case "Finished":
+        return "bg-success bg-opacity-10 text-success border border-success border-opacity-25";
+      case "Out for Delivery":
+        return "bg-primary bg-opacity-10 text-primary border border-primary border-opacity-25";
+      case "Rejected":
+        return "bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25";
+      default:
+        return "bg-light text-secondary border border-secondary border-opacity-25";
+    }
+  };
+
+  const getPayrollStatusStyle = (status: any) => {
+    switch (status) {
+      case "Paid":
+        return "bg-success bg-opacity-10 text-success border border-success border-opacity-25";
+      case "Overdue":
+        return "bg-danger bg-opacity-10 text-danger border border-danger border-opacity-25";
+      case "Pending":
+        return "bg-warning bg-opacity-10 text-warning border border-warning border-opacity-25";
+      default:
+        return "bg-secondary bg-opacity-10 text-secondary border border-secondary border-opacity-25";
+    }
+  };
+
+  const firstName = userProfile?.full_name
+    ? userProfile.full_name.split(" ")[0]
+    : "Admin";
+
+  const filteredOrders = ordersList.filter((order: any) => {
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch =
+      order.order_id.toString().includes(searchLower) ||
+      (order.customer_name &&
+        order.customer_name.toLowerCase().includes(searchLower)) ||
+      (order.customer_phone && order.customer_phone.includes(searchLower));
+    const matchesStatus =
+      statusFilter === "All" || order.status === statusFilter;
+    return matchesSearch && matchesStatus;
+  });
+
+  const getExpensePieData = () => {
+    const categoryTotals: any = {};
+    reportsList.forEach((exp: any) => {
+      const cat = exp.category || "Other";
+      categoryTotals[cat] = (categoryTotals[cat] || 0) + parseFloat(exp.amount);
+    });
+    return Object.keys(categoryTotals).map((key) => ({
+      name: key,
+      value: categoryTotals[key],
+    }));
+  };
+
+  const getRevenueLineData = () => {
+    const dataMap: any = {};
+    ordersList.forEach((o: any) => {
+      if (o.status !== "Rejected" && o.created_at) {
+        const d = new Date(o.created_at).toLocaleDateString("en-IN", {
+          month: "short",
+          day: "numeric",
+        });
+        dataMap[d] = (dataMap[d] || 0) + (parseFloat(o.total_amount) || 0);
+      }
+    });
+    return Object.keys(dataMap)
+      .reverse()
+      .map((date) => ({ name: date, Revenue: dataMap[date] }));
+  };
+
+  const revenueLineData = getRevenueLineData();
+  const expensePieData = getExpensePieData();
+
+  if (!isMounted) return null;
+
+  if (isAppLoading) {
+    return (
+      <div
+        className="d-flex flex-column w-100 vh-100 justify-content-center align-items-center"
+        style={{ backgroundColor: "#F8F9FB" }}
+      >
+        <div
+          className="spinner-border text-primary shadow-sm mb-3"
+          style={{ width: "4rem", height: "4rem", borderWidth: "0.35em" }}
+          role="status"
+        >
+          <span className="visually-hidden">Loading...</span>
+        </div>
+        <h3 className="fw-bold text-dark" style={{ letterSpacing: "0.5px" }}>
+          Laundry <span className="text-primary">ERP</span>
+        </h3>
+        <p className="text-secondary small fw-medium">
+          Washing up your dashboard...
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className="d-flex w-100 position-relative fade-in"
+      style={{
+        minHeight: "100vh",
+        backgroundColor: "#F8F9FB",
+        overflowX: "hidden",
+      }}
+    >
+      <audio
+        id="notificationSound"
+        src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3"
+        preload="auto"
+      ></audio>
+
+      {/* ================= MODALS ================= */}
+      {selectedOrderDetails && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center fade-in"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-4 p-md-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "500px" }}
+          >
+            <button
+              onClick={() => setSelectedOrderDetails(null)}
+              className="btn-close position-absolute top-0 end-0 m-4"
+            ></button>
+            <div className="text-center mb-4">
+              <div
+                className="rounded-circle bg-primary bg-opacity-10 text-primary d-flex justify-content-center align-items-center mx-auto mb-3 shadow-sm border border-primary border-opacity-25"
+                style={{ width: "60px", height: "60px", fontSize: "2rem" }}
+              >
+                <i className="bi bi-receipt"></i>
+              </div>
+              <h4 className="fw-bold text-dark mb-1">
+                Order #{selectedOrderDetails.order_id}
+              </h4>
+              <span className="badge bg-light text-secondary border px-3 py-1 mt-1">
+                {new Date(selectedOrderDetails.created_at).toLocaleString(
+                  "en-IN",
+                  { dateStyle: "medium", timeStyle: "short" },
+                )}
+              </span>
+            </div>
+            <div className="bg-light p-3 rounded-4 mb-3 border shadow-sm">
+              <h6 className="fw-bold text-dark mb-2 border-bottom pb-2">
+                <i className="bi bi-person me-2 text-primary"></i>Customer
+                Information
+              </h6>
+              <div className="small text-secondary mb-1">
+                <strong>Name:</strong> {selectedOrderDetails.customer_name}
+              </div>
+              <div className="small text-secondary mb-1">
+                <strong>Phone:</strong> {selectedOrderDetails.customer_phone}
+              </div>
+              <div className="small text-secondary">
+                <strong>Address:</strong> {selectedOrderDetails.location}
+              </div>
+            </div>
+            <div className="bg-light p-3 rounded-4 mb-4 border shadow-sm">
+              <h6 className="fw-bold text-dark mb-2 border-bottom pb-2">
+                <i className="bi bi-bag-check me-2 text-primary"></i>Order Items
+              </h6>
+              <div
+                className="small text-dark mb-3"
+                style={{
+                  lineHeight: "1.6",
+                  maxHeight: "100px",
+                  overflowY: "auto",
+                }}
+              >
+                {selectedOrderDetails.service_type
+                  .split(",")
+                  .map((item: any, i: any) => (
+                    <div key={i} className="d-flex align-items-start mb-1">
+                      <i className="bi bi-dot text-primary me-1"></i>{" "}
+                      {item.trim()}
+                    </div>
+                  ))}
+              </div>
+              <div className="d-flex justify-content-between align-items-center pt-2 border-top">
+                <strong className="text-dark">Total Amount</strong>
+                <h5 className="fw-bold text-success mb-0">
+                  ₹{selectedOrderDetails.total_amount}
+                </h5>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedOrderDetails(null)}
+              className="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm"
+            >
+              Close Invoice
+            </button>
+          </div>
+        </div>
+      )}
+
+      {selectedCustomerProfile && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center fade-in"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-4 p-md-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "400px" }}
+          >
+            <button
+              onClick={() => setSelectedCustomerProfile(null)}
+              className="btn-close position-absolute top-0 end-0 m-4"
+            ></button>
+            <div className="text-center mb-4">
+              <div
+                className="rounded-circle bg-primary bg-opacity-10 text-primary d-flex justify-content-center align-items-center mx-auto mb-3 shadow-sm border border-primary border-opacity-25"
+                style={{ width: "80px", height: "80px", fontSize: "2.5rem" }}
+              >
+                <i className="bi bi-person-circle"></i>
+              </div>
+              <h4 className="fw-bold text-dark mb-1">
+                {selectedCustomerProfile.name}
+              </h4>
+              <span className="badge bg-light text-secondary border px-3 py-1">
+                Customer Details
+              </span>
+            </div>
+            <div className="bg-light p-3 rounded-4 mb-4 border shadow-sm">
+              <div className="d-flex align-items-center mb-3">
+                <i className="bi bi-telephone-fill text-primary fs-5 me-3"></i>
+                <div>
+                  <small
+                    className="text-muted d-block"
+                    style={{ fontSize: "0.7rem", fontWeight: "bold" }}
+                  >
+                    PHONE NUMBER
+                  </small>
+                  <span className="fw-medium text-dark">
+                    {selectedCustomerProfile.phone}
+                  </span>
+                </div>
+              </div>
+              <div className="d-flex align-items-center">
+                <i className="bi bi-geo-alt-fill text-danger fs-5 me-3"></i>
+                <div>
+                  <small
+                    className="text-muted d-block"
+                    style={{ fontSize: "0.7rem", fontWeight: "bold" }}
+                  >
+                    FULL ADDRESS
+                  </small>
+                  <span
+                    className="fw-medium text-dark"
+                    style={{ lineHeight: "1.3", display: "block" }}
+                  >
+                    {selectedCustomerProfile.address}
+                  </span>
+                </div>
+              </div>
+            </div>
+            <button
+              onClick={() => setSelectedCustomerProfile(null)}
+              className="btn btn-primary w-100 fw-bold py-2 rounded-pill shadow-sm"
+            >
+              Close Profile
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isAddExpenseModalOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "450px" }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="fw-bold mb-0 text-dark">Log Expense</h5>
+              <button
+                onClick={() => setIsAddExpenseModalOpen(false)}
+                className="btn-close"
+              ></button>
+            </div>
+            <form onSubmit={handleAddExpenseSubmit}>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Expense Category
+                </label>
+                <select
+                  className="form-select bg-light border-0 py-2"
+                  required
+                  value={newExpense.category}
+                  onChange={(e: any) =>
+                    setNewExpense({ ...newExpense, category: e.target.value })
+                  }
+                >
+                  <option value="">Select Category</option>
+                  <option value="Detergent/Chemicals">
+                    Detergent & Chemicals
+                  </option>
+                  <option value="Electricity">Electricity Bill</option>
+                  <option value="Equipment Repair">
+                    Equipment Maintenance
+                  </option>
+                  <option value="Fuel/Transport">Fuel & Transportation</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newExpense.description}
+                  onChange={(e: any) =>
+                    setNewExpense({
+                      ...newExpense,
+                      description: e.target.value,
+                    })
+                  }
+                  placeholder="e.g. Bought 10kg Surf Excel"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="form-label text-secondary small fw-semibold">
+                  Amount Spent (₹)
+                </label>
+                <input
+                  type="number"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newExpense.amount}
+                  onChange={(e: any) =>
+                    setNewExpense({ ...newExpense, amount: e.target.value })
+                  }
+                  placeholder="500"
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3"
+              >
+                Save Expense Record
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isAddStaffModalOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "450px" }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="fw-bold mb-0 text-dark">Add New Staff</h5>
+              <button
+                onClick={() => setIsAddStaffModalOpen(false)}
+                className="btn-close"
+              ></button>
+            </div>
+            <form onSubmit={handleAddStaffSubmit}>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newStaff.name}
+                  onChange={(e: any) =>
+                    setNewStaff({ ...newStaff, name: e.target.value })
+                  }
+                  placeholder="Staff Name"
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Designation
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newStaff.designation}
+                  onChange={(e: any) =>
+                    setNewStaff({ ...newStaff, designation: e.target.value })
+                  }
+                  placeholder="e.g. Delivery Executive"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="form-label text-secondary small fw-semibold">
+                  Monthly Salary (₹)
+                </label>
+                <input
+                  type="number"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newStaff.salary}
+                  onChange={(e: any) =>
+                    setNewStaff({ ...newStaff, salary: e.target.value })
+                  }
+                  placeholder="15000"
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3"
+              >
+                Save Staff Member
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isAddStockModalOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "450px" }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="fw-bold mb-0 text-dark">Add Inventory Stock</h5>
+              <button
+                onClick={() => setIsAddStockModalOpen(false)}
+                className="btn-close"
+              ></button>
+            </div>
+            <form onSubmit={handleAddStockSubmit}>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Item Name
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newStock.name}
+                  onChange={(e: any) =>
+                    setNewStock({ ...newStock, name: e.target.value })
+                  }
+                  placeholder="e.g. Ariel Detergent"
+                />
+              </div>
+              <div className="row">
+                <div className="col-8 mb-3">
+                  <label className="form-label text-secondary small fw-semibold">
+                    Quantity
+                  </label>
+                  <input
+                    type="number"
+                    className="form-control bg-light border-0 py-2"
+                    required
+                    value={newStock.quantity}
+                    onChange={(e: any) =>
+                      setNewStock({ ...newStock, quantity: e.target.value })
+                    }
+                    placeholder="10"
+                  />
+                </div>
+                <div className="col-4 mb-3">
+                  <label className="form-label text-secondary small fw-semibold">
+                    Unit
+                  </label>
+                  <select
+                    className="form-select bg-light border-0 py-2"
+                    value={newStock.unit}
+                    onChange={(e: any) =>
+                      setNewStock({ ...newStock, unit: e.target.value })
+                    }
+                  >
+                    <option value="kg">kg</option>
+                    <option value="Ltr">Ltr</option>
+                    <option value="ml">ml</option>
+                    <option value="pcs">pcs</option>
+                  </select>
+                </div>
+              </div>
+              <div className="mb-4">
+                <label className="form-label text-secondary small fw-semibold">
+                  Total Cost (₹)
+                </label>
+                <input
+                  type="number"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={newStock.price}
+                  onChange={(e: any) =>
+                    setNewStock({ ...newStock, price: e.target.value })
+                  }
+                  placeholder="1500"
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3"
+              >
+                Save Stock Item
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isServiceModalOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.6)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-5 rounded-4 shadow-lg position-relative"
+            style={{ width: "90%", maxWidth: "450px" }}
+          >
+            <div className="d-flex justify-content-between align-items-center mb-4">
+              <h5 className="fw-bold mb-0 text-dark">
+                {editingServiceId ? "Edit Service" : "Add New Service"}
+              </h5>
+              <button
+                onClick={() => setIsServiceModalOpen(false)}
+                className="btn-close"
+              ></button>
+            </div>
+            <form onSubmit={handleSaveServiceSubmit}>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Service Name
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={serviceForm.name}
+                  onChange={(e: any) =>
+                    setServiceForm({ ...serviceForm, name: e.target.value })
+                  }
+                  placeholder="e.g. Dry Cleaning / Jacket"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="form-label text-secondary small fw-semibold">
+                  Price per piece (₹)
+                </label>
+                <input
+                  type="number"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={serviceForm.price}
+                  onChange={(e: any) =>
+                    setServiceForm({ ...serviceForm, price: e.target.value })
+                  }
+                  placeholder="150"
+                />
+              </div>
+              <button
+                type="submit"
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3"
+              >
+                {editingServiceId ? "Update Service" : "Add to App Catalog"}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isOnboardingOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.8)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white p-4 p-md-5 rounded-4 shadow-lg position-relative"
+            style={{
+              width: "90%",
+              maxWidth: "450px",
+              maxHeight: "90vh",
+              overflowY: "auto",
+            }}
+          >
+            <h3 className="fw-bold text-dark mb-2">Complete Profile</h3>
+            <p className="text-secondary small mb-4">
+              Enter your details to continue.
+            </p>
+            <form onSubmit={handleOnboardingSubmit}>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Full Name
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={onboardingData.name}
+                  onChange={(e: any) =>
+                    setOnboardingData({
+                      ...onboardingData,
+                      name: e.target.value,
+                    })
+                  }
+                  placeholder="John Doe"
+                />
+              </div>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Phone Number
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  value={onboardingData.phone}
+                  onChange={(e: any) =>
+                    setOnboardingData({
+                      ...onboardingData,
+                      phone: e.target.value,
+                    })
+                  }
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+              <div className="mb-4">
+                <label className="form-label text-secondary small fw-semibold">
+                  Full Address
+                </label>
+                <textarea
+                  className="form-control bg-light border-0 py-2"
+                  required
+                  rows={3}
+                  value={onboardingData.address}
+                  onChange={(e: any) =>
+                    setOnboardingData({
+                      ...onboardingData,
+                      address: e.target.value,
+                    })
+                  }
+                  placeholder="House no, Street, City"
+                ></textarea>
+              </div>
+              <div className="d-flex gap-2">
+                <button
+                  type="submit"
+                  className="btn btn-primary w-100 fw-bold py-2 rounded-3"
+                >
+                  Save Details
+                </button>
+                {userProfile?.full_name && (
+                  <button
+                    type="button"
+                    onClick={() => setIsOnboardingOpen(false)}
+                    className="btn btn-outline-secondary px-3 rounded-3"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {isProfilePopupOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 9999 }}
+        >
+          <div
+            className="bg-white rounded-4 shadow-lg p-4 d-flex flex-column flex-md-row gap-4 align-items-center position-relative"
+            style={{ width: "90%", maxWidth: "500px" }}
+          >
+            <button
+              onClick={() => setIsProfilePopupOpen(false)}
+              className="btn-close position-absolute top-0 end-0 m-3"
+            ></button>
+            <div
+              className="rounded-circle bg-primary text-white d-flex justify-content-center align-items-center fw-bold fs-1 shadow-sm"
+              style={{ width: "80px", height: "80px", flexShrink: 0 }}
+            >
+              {userProfile?.full_name
+                ? userProfile.full_name[0].toUpperCase()
+                : "U"}
+            </div>
+            <div className="flex-grow-1 text-center text-md-start">
+              <h4 className="fw-bold text-dark mb-1">
+                {userProfile?.full_name || "No Name Set"}
+              </h4>
+              <p
+                className="text-muted small mb-3 text-uppercase fw-semibold"
+                style={{ fontSize: "0.75rem", letterSpacing: "0.5px" }}
+              >
+                Role: {userProfile?.role || "user"}
+              </p>
+              <div className="d-flex flex-column gap-2 mb-4 text-secondary small">
+                <div>
+                  <i className="bi bi-envelope me-2 text-primary"></i>
+                  {currentUser?.email}
+                </div>
+                <div>
+                  <i className="bi bi-telephone me-2 text-primary"></i>
+                  {userProfile?.phone || "No phone number"}
+                </div>
+                <div>
+                  <i className="bi bi-geo-alt me-2 text-primary"></i>
+                  {userProfile?.address || "No address"}
+                </div>
+              </div>
+              <div className="d-flex justify-content-center justify-content-md-start gap-2">
+                <button
+                  onClick={() => {
+                    setIsProfilePopupOpen(false);
+                    setOnboardingData({
+                      name: userProfile?.full_name || "",
+                      phone: userProfile?.phone || "",
+                      address: userProfile?.address || "",
+                    });
+                    setIsOnboardingOpen(true);
+                  }}
+                  className="btn btn-outline-primary btn-sm px-3 fw-medium rounded-pill"
+                >
+                  <i className="bi bi-pencil me-1"></i> Edit Profile
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className="btn btn-danger btn-sm px-3 fw-medium rounded-pill"
+                >
+                  <i className="bi bi-box-arrow-right me-1"></i> Logout
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= DARK UI SIDEBAR ================= */}
+      <aside
+        className="d-flex flex-column transition-all shadow-lg"
+        style={{
+          width: sidebarWidth,
+          position: "fixed",
+          height: "100vh",
+          zIndex: 1050,
+          backgroundColor: "#0A1128",
+          transition: "width 0.3s ease, transform 0.3s ease",
+          transform:
+            isMobile && isSidebarCollapsed
+              ? "translateX(-100%)"
+              : "translateX(0)",
+          overflowY: "auto",
+          overflowX: "hidden",
+        }}
+      >
+        <div
+          className={`d-flex align-items-center py-4 mb-2 ${isSidebarCollapsed && !isMobile ? "justify-content-center px-0" : "px-4"}`}
+        >
+          <div
+            className="bg-white rounded-circle d-flex justify-content-center align-items-center shadow-sm"
+            style={{ width: "35px", height: "35px", flexShrink: 0 }}
+          >
+            <i className="bi bi-droplet-half text-primary fs-5"></i>
+          </div>
+          {(!isSidebarCollapsed || isMobile) && (
+            <div className="ms-3 text-white text-nowrap">
+              <h5 className="fw-bold mb-0" style={{ letterSpacing: "0.5px" }}>
+                Laundry <span className="text-primary">ERP</span>
+              </h5>
+              <small
+                className="text-white-50"
+                style={{
+                  fontSize: "0.65rem",
+                  display: "block",
+                  marginTop: "-2px",
+                }}
+              >
+                We Care Your Clothes
+              </small>
+            </div>
+          )}
+        </div>
+
+        <div className="px-3 flex-grow-1">
+          <nav className="nav flex-column gap-2 mt-2">
+            <button
+              title="Dashboard"
+              onClick={() => {
+                setActiveSection("dashboard");
+                if (isMobile) setIsSidebarCollapsed(true);
+              }}
+              className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "dashboard" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+              style={{
+                backgroundColor:
+                  activeSection === "dashboard" ? "#0d6efd" : "transparent",
+              }}
+            >
+              <div className="d-flex align-items-center">
+                <i
+                  className={`bi bi-grid-1x2-fill fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                ></i>{" "}
+                {(!isSidebarCollapsed || isMobile) && <span>Dashboard</span>}
+              </div>
+            </button>
+            <button
+              title={userProfile?.role === "user" ? "Book Order" : "Orders"}
+              onClick={() => {
+                setActiveSection("orders");
+                if (isMobile) setIsSidebarCollapsed(true);
+              }}
+              className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "orders" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+              style={{
+                backgroundColor:
+                  activeSection === "orders" ? "#0d6efd" : "transparent",
+              }}
+            >
+              <div className="d-flex align-items-center">
+                <i
+                  className={`bi bi-clipboard-check fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                ></i>{" "}
+                {(!isSidebarCollapsed || isMobile) && (
+                  <span>
+                    {userProfile?.role === "user" ? "Book Order" : "Orders"}
+                  </span>
+                )}
+              </div>
+            </button>
+            {userProfile?.role === "admin" && (
+              <button
+                title="Payroll"
+                onClick={() => {
+                  setActiveSection("payroll");
+                  if (isMobile) setIsSidebarCollapsed(true);
+                }}
+                className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "payroll" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+                style={{
+                  backgroundColor:
+                    activeSection === "payroll" ? "#0d6efd" : "transparent",
+                }}
+              >
+                <div className="d-flex align-items-center">
+                  <i
+                    className={`bi bi-people fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                  ></i>{" "}
+                  {(!isSidebarCollapsed || isMobile) && <span>Payroll</span>}
+                </div>
+              </button>
+            )}
+            {(userProfile?.role === "admin" ||
+              userProfile?.role === "manager") && (
+              <>
+                <button
+                  title="Services"
+                  onClick={() => {
+                    setActiveSection("services");
+                    if (isMobile) setIsSidebarCollapsed(true);
+                  }}
+                  className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "services" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+                  style={{
+                    backgroundColor:
+                      activeSection === "services" ? "#0d6efd" : "transparent",
+                  }}
+                >
+                  <div className="d-flex align-items-center">
+                    <i
+                      className={`bi bi-tag-fill fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                    ></i>{" "}
+                    {(!isSidebarCollapsed || isMobile) && (
+                      <span>Services Mgt</span>
+                    )}
+                  </div>
+                </button>
+                <button
+                  title="Stocks"
+                  onClick={() => {
+                    setActiveSection("stocks");
+                    if (isMobile) setIsSidebarCollapsed(true);
+                  }}
+                  className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "stocks" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+                  style={{
+                    backgroundColor:
+                      activeSection === "stocks" ? "#0d6efd" : "transparent",
+                  }}
+                >
+                  <div className="d-flex align-items-center">
+                    <i
+                      className={`bi bi-box-seam fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                    ></i>{" "}
+                    {(!isSidebarCollapsed || isMobile) && (
+                      <span>Inventory Stocks</span>
+                    )}
+                  </div>
+                </button>
+                <button
+                  title="Reports"
+                  onClick={() => {
+                    setActiveSection("reports");
+                    if (isMobile) setIsSidebarCollapsed(true);
+                  }}
+                  className={`nav-link text-start w-100 fw-medium rounded-3 d-flex align-items-center py-3 border-0 transition-all ${activeSection === "reports" ? "bg-primary text-white shadow" : "text-white-50 hover-bg-dark"} ${isSidebarCollapsed && !isMobile ? "justify-content-center" : "justify-content-between px-3"}`}
+                  style={{
+                    backgroundColor:
+                      activeSection === "reports" ? "#0d6efd" : "transparent",
+                  }}
+                >
+                  <div className="d-flex align-items-center">
+                    <i
+                      className={`bi bi-bar-chart-fill fs-6 ${isSidebarCollapsed && !isMobile ? "" : "me-3"}`}
+                    ></i>{" "}
+                    {(!isSidebarCollapsed || isMobile) && <span>Reports</span>}
+                  </div>
+                </button>
+              </>
+            )}
+          </nav>
+        </div>
+      </aside>
+
+      {isMobile && !isSidebarCollapsed && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100"
+          style={{ backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1040 }}
+          onClick={() => setIsSidebarCollapsed(true)}
+        ></div>
+      )}
+
+      <main
+        className="w-100 transition-all d-flex flex-column"
+        style={{
+          marginLeft: isMobile ? "0px" : sidebarWidth,
+          transition: "margin-left 0.3s ease",
+          minHeight: "100vh",
+        }}
+      >
+        {/* HEADER (WITH RESTORED POLICY LINKS & LIVE CLOCK) */}
+        <header
+          className="bg-white d-flex justify-content-between align-items-center px-3 px-md-4 py-3 sticky-top border-bottom"
+          style={{ zIndex: 1030 }}
+        >
+          <div className="d-flex align-items-center gap-3">
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className="btn btn-primary rounded-circle d-flex justify-content-center align-items-center p-0 shadow-sm"
+              style={{ width: "40px", height: "40px" }}
+            >
+              <i className="bi bi-list fs-5 text-white"></i>
+            </button>
+          </div>
+
+          <div className="d-flex align-items-center gap-2 gap-md-4">
+            {/* Policy Links */}
+            <div className="d-none d-xl-flex align-items-center gap-3 border-end pe-3 me-1">
+              <a
+                href="/tos"
+                className="text-secondary text-decoration-none small hover-primary transition-all"
+                style={{ fontSize: "0.75rem", fontWeight: "500" }}
+              >
+                Terms of Service
+              </a>
+              <a
+                href="/pp"
+                className="text-secondary text-decoration-none small hover-primary transition-all"
+                style={{ fontSize: "0.75rem", fontWeight: "500" }}
+              >
+                Privacy Policy
+              </a>
+              {userProfile?.role === "user" && (
+                <a
+                  href="/tos"
+                  className="text-secondary text-decoration-none small hover-primary transition-all"
+                  style={{ fontSize: "0.75rem", fontWeight: "500" }}
+                >
+                  Refund Policy
+                </a>
+              )}
+            </div>
+
+            {/* Live Date & Time Pill */}
+            {currentTime && (
+              <div className="d-none d-md-flex align-items-center text-secondary border rounded-pill px-3 py-2 small fw-medium bg-white">
+                <i className="bi bi-calendar3 me-2 text-dark"></i>
+                {currentTime.toLocaleDateString("en-IN", {
+                  weekday: "short",
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })}
+                <span className="mx-2 text-muted">|</span>
+                {currentTime.toLocaleTimeString("en-IN", {
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  second: "2-digit",
+                })}
+              </div>
+            )}
+
+            {/* ARYA AI WIDGET (DYNAMIC STATE UI) */}
+            {userProfile?.role === "admin" && (
+              <div
+                className={`d-none d-md-flex align-items-center gap-2 border rounded-pill px-3 py-2 shadow-sm transition-all ${
+                  aryaState === "listening"
+                    ? "bg-primary text-white scale-up"
+                    : aryaState === "processing"
+                      ? "bg-warning text-dark"
+                      : "bg-light text-secondary"
+                }`}
+              >
+                {aryaState === "listening" ? (
+                  <>
+                    <div className="spinner-grow spinner-grow-sm text-white" />
+                    <span className="small fw-bold">Listening...</span>
+                  </>
+                ) : aryaState === "processing" ? (
+                  <>
+                    <div className="spinner-border spinner-border-sm text-dark" />
+                    <span className="small fw-bold">Processing...</span>
+                  </>
+                ) : (
+                  <>
+                    <i className="bi bi-mic-fill"></i>
+                    <span className="small fw-medium">Say "Hey Arya"</span>
+                  </>
+                )}
+              </div>
+            )}
+
+            <div className="position-relative">
+              <button
+                onClick={markAllNotificationsRead}
+                className="btn btn-white rounded-circle position-relative p-2 border shadow-sm"
+                style={{ width: "40px", height: "40px" }}
+              >
+                <i className="bi bi-bell text-dark"></i>
+                {unreadCount > 0 && (
+                  <span
+                    className="position-absolute top-0 start-100 translate-middle badge rounded-circle bg-warning text-dark border border-white"
+                    style={{ fontSize: "0.65rem", padding: "4px 6px" }}
+                  >
+                    {unreadCount}
+                  </span>
+                )}
+              </button>
+              {isNotificationOpen && (
+                <div
+                  className="dropdown-menu show position-absolute end-0 mt-3 shadow-lg border-0 rounded-4 py-0"
+                  style={{ width: "300px", zIndex: 1050, overflow: "hidden" }}
+                >
+                  <div className="bg-primary text-white px-4 py-3 d-flex justify-content-between align-items-center">
+                    <h6 className="mb-0 fw-bold">Notifications</h6>
+                  </div>
+                  <div
+                    className="list-group list-group-flush"
+                    style={{ maxHeight: "300px", overflowY: "auto" }}
+                  >
+                    {notifications.length === 0 ? (
+                      <div className="text-center py-4 text-muted small">
+                        No new notifications
+                      </div>
+                    ) : (
+                      notifications.map((n: any) => (
+                        <div
+                          key={n.id}
+                          className="list-group-item list-group-item-action px-4 py-3 bg-light border-bottom"
+                        >
+                          <div className="d-flex w-100 justify-content-between mb-1">
+                            <h6 className="mb-0 fw-bold small text-dark">
+                              <i
+                                className="bi bi-circle-fill text-primary me-2"
+                                style={{ fontSize: "8px" }}
+                              ></i>
+                              Update
+                            </h6>
+                            <small
+                              className="text-muted"
+                              style={{ fontSize: "0.7rem" }}
+                            >
+                              {n.timestamp}
+                            </small>
+                          </div>
+                          <p
+                            className="mb-0 text-secondary small"
+                            style={{ lineHeight: "1.4" }}
+                          >
+                            {n.message}
+                          </p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              className="d-flex align-items-center gap-2 cursor-pointer ms-1 ms-md-0"
+              onClick={() => setIsProfilePopupOpen(true)}
+            >
+              <div
+                className="rounded-circle bg-primary text-white d-flex justify-content-center align-items-center fw-bold shadow-sm"
+                style={{ width: "40px", height: "40px", fontSize: "1rem" }}
+              >
+                {userProfile?.full_name
+                  ? userProfile.full_name[0].toUpperCase()
+                  : "T"}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <div className="container-fluid p-3 p-md-4 flex-grow-1">
+          {activeSection === "dashboard" && (
+            <div className="fade-in">
+              <div className="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
+                <div>
+                  <h2 className="fw-bold text-dark mb-1">
+                    Welcome back, {firstName} 👋
+                  </h2>
+                  <p className="text-secondary mb-0">
+                    Here's what's happening with your business today.
+                  </p>
+                </div>
+              </div>
+
+              {userProfile?.role !== "user" && (
+                <>
+                  <div className="row g-3 g-md-4 mb-4">
+                    <div className="col-12 col-md-4">
+                      <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-primary premium-hover transition-all">
+                        <p className="mb-1 fw-semibold text-secondary small text-uppercase">
+                          Today's Revenue
+                        </p>
+                        <div className="d-flex align-items-center gap-2">
+                          <h3 className="fw-bold text-dark mb-0">
+                            ₹{dashboardStats.todayRev}
+                          </h3>
+                          <span className="badge bg-light text-secondary border rounded-pill small">
+                            {dashboardStats.todayOrders} Orders
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-success premium-hover transition-all">
+                        <p className="mb-1 fw-semibold text-secondary small text-uppercase">
+                          This Month
+                        </p>
+                        <div className="d-flex align-items-center gap-2">
+                          <h3 className="fw-bold text-dark mb-0">
+                            ₹{dashboardStats.monthRev}
+                          </h3>
+                          <span className="badge bg-light text-secondary border rounded-pill small">
+                            {dashboardStats.monthOrders} Orders
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-warning premium-hover transition-all">
+                        <p className="mb-1 fw-semibold text-secondary small text-uppercase">
+                          This Year
+                        </p>
+                        <div className="d-flex align-items-center gap-2">
+                          <h3 className="fw-bold text-dark mb-0">
+                            ₹{dashboardStats.yearRev}
+                          </h3>
+                          <span className="badge bg-light text-secondary border rounded-pill small">
+                            {dashboardStats.yearOrders} Orders
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="row g-3 g-md-4 mb-4">
+                    {[
+                      {
+                        title: "Total Lifetime Orders",
+                        value: dashboardStats.totalOrders,
+                        color: "primary",
+                        hex: "#0d6efd",
+                        icon: "cart3",
+                      },
+                      {
+                        title: "Lifetime Revenue",
+                        value: `₹${dashboardStats.revenue}`,
+                        color: "success",
+                        hex: "#198754",
+                        icon: "currency-rupee",
+                      },
+                      {
+                        title: "Pending Pickups",
+                        value: dashboardStats.pendingPickups,
+                        color: "warning",
+                        hex: "#fd7e14",
+                        icon: "bag-fill",
+                      },
+                      {
+                        title: "Delivery",
+                        value: dashboardStats.delivery,
+                        color: "purple",
+                        hex: "#6f42c1",
+                        icon: "truck",
+                      },
+                    ].map((stat, idx) => (
+                      <div className="col-6 col-xl-3" key={idx}>
+                        <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 position-relative overflow-hidden premium-hover transition-all">
+                          <div className="d-flex align-items-center mb-3 gap-3">
+                            <div
+                              className="rounded-circle d-flex justify-content-center align-items-center text-white"
+                              style={{
+                                width: "48px",
+                                height: "48px",
+                                backgroundColor: stat.hex,
+                              }}
+                            >
+                              <i className={`bi bi-${stat.icon} fs-5`}></i>
+                            </div>
+                            <div>
+                              <p
+                                className="mb-0 fw-semibold text-secondary small"
+                                style={{ fontSize: "0.75rem" }}
+                              >
+                                {stat.title}
+                              </p>
+                              <h4 className="fw-bold text-dark mb-0">
+                                {stat.value}
+                              </h4>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
+              <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                <div className="card-header bg-white border-bottom-0 p-3 p-md-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <div className="d-flex align-items-center gap-3">
+                    <div
+                      className="bg-primary rounded-circle text-white d-flex justify-content-center align-items-center shadow-sm"
+                      style={{ width: "40px", height: "40px" }}
+                    >
+                      <i className="bi bi-clipboard2-data fs-5"></i>
+                    </div>
+                    <div>
+                      <h5 className="fw-bold text-dark mb-0">
+                        {userProfile?.role === "user"
+                          ? "Your Recent Orders"
+                          : "Recent Live Orders"}
+                      </h5>
+                    </div>
+                  </div>
+                  <div className="d-flex gap-2">
+                    <button
+                      onClick={() => setActiveSection("orders")}
+                      className="btn btn-primary btn-sm fw-medium rounded-3 px-3"
+                    >
+                      View All Orders <i className="bi bi-arrow-right ms-1"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <div className="card-body p-0">
+                  {ordersList.length === 0 ? (
+                    <div className="text-center py-5">
+                      <div className="mb-3">
+                        <i
+                          className="bi bi-inboxes text-primary opacity-50"
+                          style={{ fontSize: "4rem" }}
+                        ></i>
+                      </div>
+                      <h5 className="fw-bold text-dark">No Orders Found</h5>
+                    </div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-hover align-middle mb-0 text-nowrap">
+                        <thead className="bg-light border-bottom border-top">
+                          <tr
+                            className="text-secondary"
+                            style={{
+                              fontSize: "0.75rem",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
+                            <th className="fw-bold py-3 ps-4 border-0">
+                              ORDER ID
+                            </th>
+                            <th className="fw-bold py-3 border-0">
+                              CUSTOMER INFO
+                            </th>
+                            <th className="fw-bold py-3 border-0">LOCATION</th>
+                            <th className="fw-bold py-3 border-0">AMOUNT</th>
+                            <th className="fw-bold py-3 pe-4 border-0 text-start">
+                              STATUS
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ordersList.slice(0, 5).map((order: any) => (
+                            <tr
+                              key={order.order_id}
+                              className="border-bottom border-light"
+                            >
+                              <td className="ps-4 py-3 fw-bold text-dark">
+                                {userProfile?.role !== "user" ? (
+                                  <span
+                                    className="text-primary text-decoration-underline cursor-pointer"
+                                    onClick={() =>
+                                      setSelectedOrderDetails(order)
+                                    }
+                                  >
+                                    #{order.order_id}
+                                  </span>
+                                ) : (
+                                  `#${order.order_id}`
+                                )}
+                              </td>
+                              <td className="py-3">
+                                {userProfile?.role !== "user" ? (
+                                  <span
+                                    className="fw-semibold text-dark d-block cursor-pointer text-decoration-underline"
+                                    onClick={() =>
+                                      setSelectedCustomerProfile({
+                                        name: order.customer_name,
+                                        phone: order.customer_phone,
+                                        address: order.location,
+                                      })
+                                    }
+                                  >
+                                    {order.customer_name}
+                                  </span>
+                                ) : (
+                                  <span className="fw-semibold text-dark d-block">
+                                    {order.customer_name}
+                                  </span>
+                                )}
+                                <span className="text-secondary small">
+                                  {order.customer_phone}
+                                </span>
+                              </td>
+                              <td className="py-3 text-secondary small">
+                                {order.location}
+                              </td>
+                              <td className="py-3 fw-bold text-dark">
+                                ₹{order.total_amount || 0}
+                              </td>
+                              <td className="pe-4 py-3 text-start">
+                                <span
+                                  className={`badge rounded-pill px-3 py-2 fw-semibold ${getOrderStatusStyle(order.status)}`}
+                                >
+                                  {order.status}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "services" &&
+            (userProfile?.role === "admin" ||
+              userProfile?.role === "manager") && (
+              <div className="fade-in">
+                <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                  <h4 className="fw-bold text-dark mb-0">Services Catalog</h4>
+                  <button
+                    onClick={openAddServiceModal}
+                    className="btn btn-primary btn-sm px-4 py-2 fw-medium rounded-3 shadow-sm d-flex align-items-center gap-2"
+                  >
+                    <i className="bi bi-plus-circle"></i> Add New Service
+                  </button>
+                </div>
+
+                <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                  <div className="card-body p-0">
+                    <div className="table-responsive">
+                      <table className="table table-hover align-middle mb-0 text-nowrap">
+                        <thead className="bg-light border-bottom">
+                          <tr
+                            className="text-secondary"
+                            style={{
+                              fontSize: "0.75rem",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
+                            <th className="fw-bold py-3 ps-4 border-0">
+                              SERVICE ID
+                            </th>
+                            <th className="fw-bold py-3 border-0">
+                              SERVICE NAME
+                            </th>
+                            <th className="fw-bold py-3 border-0">
+                              PRICE PER PIECE
+                            </th>
+                            <th className="fw-bold py-3 pe-4 border-0 text-end">
+                              ACTIONS
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {clothCatalog.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={4}
+                                className="text-center py-5 text-muted"
+                              >
+                                <i className="bi bi-tags fs-3 d-block mb-2"></i>{" "}
+                                No services found.
+                              </td>
+                            </tr>
+                          ) : (
+                            clothCatalog.map((service: any) => (
+                              <tr
+                                key={service.service_id}
+                                className="border-bottom border-light"
+                              >
+                                <td className="ps-4 py-3 fw-bold text-secondary small">
+                                  #{service.service_id}
+                                </td>
+                                <td className="py-3 fw-bold text-dark">
+                                  {service.name}
+                                </td>
+                                <td className="py-3 fw-bold text-success bg-success bg-opacity-10 rounded px-2 text-center d-inline-block mt-2">
+                                  ₹{service.price}
+                                </td>
+                                <td className="pe-4 py-3 text-end">
+                                  <button
+                                    onClick={() =>
+                                      openEditServiceModal(service)
+                                    }
+                                    className="btn btn-sm btn-light border text-primary shadow-sm rounded-3 py-1 px-2 me-2"
+                                  >
+                                    <i className="bi bi-pencil-square"></i>
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteService(service.service_id)
+                                    }
+                                    className="btn btn-sm btn-white text-danger border shadow-sm rounded-3 py-1 px-2"
+                                  >
+                                    <i className="bi bi-trash3-fill"></i>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {activeSection === "orders" && (
+            <div className="fade-in">
+              {userProfile?.role === "user" ? (
+                <div className="fade-in">
+                  <div className="mb-4">
+                    <h4 className="fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                      Book a Laundry Service{" "}
+                      <i className="bi bi-stars text-warning fs-5"></i>
+                    </h4>
+                  </div>
+
+                  <div className="row g-4">
+                    <div className="col-lg-7">
+                      <div className="row g-3">
+                        {clothCatalog.map((cloth) => (
+                          <div className="col-sm-6" key={cloth.service_id}>
+                            <div
+                              className="card border border-light shadow-sm rounded-4 p-3 h-100 d-flex flex-row justify-content-between align-items-center bg-white premium-hover cursor-pointer"
+                              style={{ transition: "all 0.3s ease" }}
+                            >
+                              <div className="d-flex align-items-center gap-3">
+                                <div
+                                  className="bg-primary bg-opacity-10 text-primary rounded-circle d-flex justify-content-center align-items-center"
+                                  style={{ width: "45px", height: "45px" }}
+                                >
+                                  <i
+                                    className={`bi ${cloth.name.toLowerCase().includes("shirt") ? "bi-file-person" : cloth.name.toLowerCase().includes("bed") ? "bi-layout-text-window" : "bi-tag"} fs-5`}
+                                  ></i>
+                                </div>
+                                <div>
+                                  <h6
+                                    className="fw-bold mb-1 text-dark"
+                                    style={{ fontSize: "0.9rem" }}
+                                  >
+                                    {cloth.name}
+                                  </h6>
+                                  <p className="text-primary fw-bold mb-0 small">
+                                    ₹{cloth.price}{" "}
+                                    <span
+                                      className="text-muted fw-normal"
+                                      style={{ fontSize: "0.7rem" }}
+                                    >
+                                      / pc
+                                    </span>
+                                  </p>
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => addToCart(cloth)}
+                                className="btn btn-light text-primary btn-sm rounded-circle shadow-sm d-flex justify-content-center align-items-center add-btn-hover"
+                                style={{ width: "35px", height: "35px" }}
+                              >
+                                <i className="bi bi-plus-lg fw-bold"></i>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="col-lg-5">
+                      <div className="card border-0 shadow-lg rounded-4 p-4 bg-white position-relative overflow-hidden cart-card-premium">
+                        <div
+                          className="position-absolute top-0 end-0 bg-primary opacity-10 rounded-circle blur-effect"
+                          style={{
+                            width: "150px",
+                            height: "150px",
+                            marginRight: "-50px",
+                            marginTop: "-50px",
+                            filter: "blur(40px)",
+                          }}
+                        ></div>
+                        <div className="d-flex justify-content-between align-items-center mb-4 position-relative z-1">
+                          <h5 className="fw-bold text-dark mb-0">
+                            Order Summary
+                          </h5>
+                          <span className="badge bg-primary bg-opacity-10 text-primary rounded-pill px-3 py-2 fw-bold">
+                            {cart.length} Items
+                          </span>
+                        </div>
+
+                        {cart.length === 0 ? (
+                          <div className="text-center py-5 position-relative z-1">
+                            <div
+                              className="bg-light rounded-circle d-flex justify-content-center align-items-center mx-auto mb-3"
+                              style={{ width: "80px", height: "80px" }}
+                            >
+                              <i
+                                className="bi bi-basket2 text-muted opacity-50"
+                                style={{ fontSize: "2.5rem" }}
+                              ></i>
+                            </div>
+                            <h6 className="fw-bold text-dark">
+                              Your cart is empty
+                            </h6>
+                          </div>
+                        ) : (
+                          <div className="position-relative z-1">
+                            <div
+                              className="d-flex flex-column gap-3 mb-4 pe-2 custom-scrollbar"
+                              style={{
+                                maxHeight: "250px",
+                                overflowY: "auto",
+                                overflowX: "hidden",
+                              }}
+                            >
+                              {cart.map((item: any) => (
+                                <div
+                                  key={item.service_id}
+                                  className="d-flex justify-content-between align-items-center p-3 border border-light rounded-3 bg-light bg-opacity-50 cart-item-anim shadow-sm"
+                                >
+                                  <div className="d-flex flex-column">
+                                    <h6
+                                      className="mb-1 fw-bold text-dark"
+                                      style={{ fontSize: "0.85rem" }}
+                                    >
+                                      {item.name}
+                                    </h6>
+                                    <small className="text-secondary fw-medium">
+                                      ₹{item.price}{" "}
+                                      <span className="mx-1">x</span> {item.qty}
+                                    </small>
+                                  </div>
+                                  <div className="d-flex align-items-center gap-3">
+                                    <span className="fw-bold text-dark fs-6">
+                                      ₹{item.price * item.qty}
+                                    </span>
+                                    <button
+                                      onClick={() =>
+                                        removeFromCart(item.service_id)
+                                      }
+                                      className="btn btn-sm btn-white text-danger border shadow-sm rounded-circle d-flex justify-content-center align-items-center"
+                                      style={{ width: "28px", height: "28px" }}
+                                    >
+                                      <i
+                                        className="bi bi-trash3-fill"
+                                        style={{ fontSize: "0.7rem" }}
+                                      ></i>
+                                    </button>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                            <div className="border-top border-dashed pt-3 mb-4">
+                              <div className="d-flex justify-content-between align-items-center mb-1">
+                                <span className="text-secondary fw-medium small">
+                                  Subtotal
+                                </span>
+                                <span className="text-dark fw-bold">
+                                  ₹{calculateCartTotal()}
+                                </span>
+                              </div>
+                              <div className="d-flex justify-content-between align-items-center mb-3">
+                                <span className="text-secondary fw-medium small">
+                                  Delivery Fee
+                                </span>
+                                <span className="text-success fw-bold small">
+                                  Free
+                                </span>
+                              </div>
+                              <div className="d-flex justify-content-between align-items-center p-3 bg-primary bg-opacity-10 rounded-3">
+                                <span className="text-primary fw-bold">
+                                  Total Amount
+                                </span>
+                                <h4 className="fw-bold text-primary mb-0">
+                                  ₹{calculateCartTotal()}
+                                </h4>
+                              </div>
+                            </div>
+                            <h6
+                              className="fw-bold text-dark mb-3"
+                              style={{ fontSize: "0.85rem" }}
+                            >
+                              Payment Method
+                            </h6>
+                            <div className="d-flex flex-column gap-2 mb-4">
+                              <div
+                                className={`payment-card d-flex align-items-center p-3 rounded-3 cursor-pointer ${paymentMethod === "Online" ? "active shadow-sm" : "border border-light bg-light opacity-75"}`}
+                                onClick={() => setPaymentMethod("Online")}
+                              >
+                                <div
+                                  className={`rounded-circle d-flex justify-content-center align-items-center me-3 ${paymentMethod === "Online" ? "bg-primary text-white" : "bg-white border text-muted"}`}
+                                  style={{ width: "20px", height: "20px" }}
+                                >
+                                  {paymentMethod === "Online" && (
+                                    <i
+                                      className="bi bi-check"
+                                      style={{ fontSize: "12px" }}
+                                    ></i>
+                                  )}
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <i className="bi bi-credit-card-2-front-fill fs-5 text-primary"></i>
+                                  <div>
+                                    <span
+                                      className={`fw-bold d-block ${paymentMethod === "Online" ? "text-dark" : "text-secondary"}`}
+                                      style={{ fontSize: "0.9rem" }}
+                                    >
+                                      Pay Online (Instant)
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div
+                                className={`payment-card d-flex align-items-center p-3 rounded-3 cursor-pointer ${paymentMethod === "Cod" ? "active shadow-sm" : "border border-light bg-light opacity-75"}`}
+                                onClick={() => setPaymentMethod("Cod")}
+                              >
+                                <div
+                                  className={`rounded-circle d-flex justify-content-center align-items-center me-3 ${paymentMethod === "Cod" ? "bg-primary text-white" : "bg-white border text-muted"}`}
+                                  style={{ width: "20px", height: "20px" }}
+                                >
+                                  {paymentMethod === "Cod" && (
+                                    <i
+                                      className="bi bi-check"
+                                      style={{ fontSize: "12px" }}
+                                    ></i>
+                                  )}
+                                </div>
+                                <div className="d-flex align-items-center gap-2">
+                                  <i className="bi bi-cash-coin fs-5 text-success"></i>
+                                  <span
+                                    className={`fw-bold ${paymentMethod === "Cod" ? "text-dark" : "text-secondary"}`}
+                                    style={{ fontSize: "0.9rem" }}
+                                  >
+                                    Pay on Delivery (COD)
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <button
+                              onClick={handleCheckout}
+                              className="btn btn-gradient w-100 fw-bold py-3 rounded-pill text-white shadow-lg d-flex justify-content-center align-items-center gap-2"
+                            >
+                              <span>
+                                {paymentMethod === "Online"
+                                  ? "Proceed to Pay"
+                                  : "Place Order"}
+                              </span>{" "}
+                              <i className="bi bi-arrow-right-circle-fill fs-5"></i>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+                    <h4 className="fw-bold text-dark mb-0">Order Management</h4>
+                  </div>
+                  <div className="card border-0 shadow-sm rounded-4 bg-white mb-4">
+                    <div className="card-body p-3 d-flex flex-column flex-md-row gap-3 align-items-center">
+                      <div className="position-relative flex-grow-1 w-100">
+                        <i className="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+                        <input
+                          type="text"
+                          className="form-control bg-light border-0 rounded-pill py-2 ps-5"
+                          placeholder="Search by Order ID, Customer Name..."
+                          value={searchQuery}
+                          onChange={(e) => setSearchQuery(e.target.value)}
+                        />
+                      </div>
+                      <div className="d-flex align-items-center gap-2 w-100 w-md-auto">
+                        <i className="bi bi-funnel text-primary fs-5"></i>
+                        <select
+                          className="form-select bg-light border-0 rounded-pill py-2 w-100 fw-medium text-dark"
+                          value={statusFilter}
+                          onChange={(e) => setStatusFilter(e.target.value)}
+                          style={{ minWidth: "180px" }}
+                        >
+                          <option value="All">All Statuses</option>
+                          <option value="Pickup">Pickup</option>
+                          <option value="Received">Received</option>
+                          <option value="In Progress">In Progress</option>
+                          <option value="Finished">Finished</option>
+                          <option value="Out for Delivery">
+                            Out for Delivery
+                          </option>
+                          <option value="Rejected">Rejected</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="card border-0 shadow-sm rounded-4 bg-white">
+                    <div className="card-body p-0">
+                      <div className="table-responsive">
+                        <table className="table table-hover align-middle mb-0 text-nowrap">
+                          <thead className="bg-light border-bottom">
+                            <tr
+                              className="text-secondary"
+                              style={{
+                                fontSize: "0.75rem",
+                                letterSpacing: "0.5px",
+                              }}
+                            >
+                              <th className="fw-bold py-3 ps-4 border-0">
+                                ORDER ID
+                              </th>
+                              <th className="fw-bold py-3 border-0">
+                                DATE & TIME
+                              </th>
+                              <th className="fw-bold py-3 border-0">
+                                CUSTOMER INFO
+                              </th>
+                              <th className="fw-bold py-3 border-0">AMOUNT</th>
+                              <th className="fw-bold py-3 border-0">STATUS</th>
+                              <th className="fw-bold py-3 pe-4 border-0 text-end">
+                                UPDATE STATUS
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredOrders.length === 0 ? (
+                              <tr>
+                                <td
+                                  colSpan={6}
+                                  className="text-center py-5 text-muted"
+                                >
+                                  <i className="bi bi-search fs-3 d-block mb-2"></i>{" "}
+                                  No orders found.
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredOrders.map((order: any) => (
+                                <tr
+                                  key={order.order_id}
+                                  className="border-bottom border-light"
+                                >
+                                  <td className="ps-4 py-3 fw-bold text-dark">
+                                    <span
+                                      className="text-primary text-decoration-underline cursor-pointer"
+                                      onClick={() =>
+                                        setSelectedOrderDetails(order)
+                                      }
+                                    >
+                                      #{order.order_id}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 text-secondary small">
+                                    {order.created_at
+                                      ? new Date(
+                                          order.created_at,
+                                        ).toLocaleString("en-IN", {
+                                          dateStyle: "medium",
+                                          timeStyle: "short",
+                                        })
+                                      : "N/A"}
+                                  </td>
+                                  <td className="py-3">
+                                    <span
+                                      className="fw-semibold text-dark d-block cursor-pointer text-decoration-underline"
+                                      onClick={() =>
+                                        setSelectedCustomerProfile({
+                                          name: order.customer_name,
+                                          phone: order.customer_phone,
+                                          address: order.location,
+                                        })
+                                      }
+                                    >
+                                      {order.customer_name}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 fw-bold text-dark">
+                                    ₹{order.total_amount || 0}
+                                  </td>
+                                  <td className="py-3">
+                                    <span
+                                      className={`badge rounded-pill px-3 py-2 fw-semibold ${getOrderStatusStyle(order.status)}`}
+                                    >
+                                      {order.status}
+                                    </span>
+                                  </td>
+                                  <td className="pe-4 py-3 text-end">
+                                    <select
+                                      className="form-select form-select-sm d-inline-block w-auto border rounded-3 bg-white text-secondary shadow-none cursor-pointer"
+                                      value={order.status}
+                                      onChange={(e: any) =>
+                                        handleOrderStatusUpdate(
+                                          order.order_id,
+                                          e.target.value,
+                                        )
+                                      }
+                                    >
+                                      <option value="Pickup">Pickup</option>
+                                      <option value="Received">Received</option>
+                                      <option value="In Progress">
+                                        In Progress
+                                      </option>
+                                      <option value="Finished">Finished</option>
+                                      <option value="Out for Delivery">
+                                        Out for Delivery
+                                      </option>
+                                      <option value="Rejected">Rejected</option>
+                                    </select>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeSection === "payroll" && userProfile?.role === "admin" && (
+            <div className="fade-in">
+              <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                <h4 className="fw-bold text-dark mb-0">Payroll Management</h4>
+                <button
+                  onClick={() => setIsAddStaffModalOpen(true)}
+                  className="btn btn-primary btn-sm px-4 py-2 fw-medium rounded-3 shadow-sm d-flex align-items-center gap-2"
+                >
+                  <i className="bi bi-person-plus-fill"></i> Add Staff
+                </button>
+              </div>
+              <div className="card border-0 shadow-sm rounded-4 bg-white">
+                <div className="card-body p-0">
+                  <div className="table-responsive">
+                    <table className="table table-hover align-middle mb-0 text-nowrap">
+                      <thead className="bg-light border-bottom">
+                        <tr
+                          className="text-secondary"
+                          style={{
+                            fontSize: "0.75rem",
+                            letterSpacing: "0.5px",
+                          }}
+                        >
+                          <th className="fw-bold py-3 ps-4 border-0">
+                            STAFF NAME
+                          </th>
+                          <th className="fw-bold py-3 border-0">DESIGNATION</th>
+                          <th className="fw-bold py-3 border-0">
+                            SALARY{" "}
+                            <button
+                              onClick={handleUnlockSalary}
+                              className="btn btn-link text-muted p-0 ms-2 text-decoration-none border-0"
+                            >
+                              <i
+                                className={`bi ${isSalaryVisible ? "bi-unlock-fill text-primary" : "bi-lock-fill"}`}
+                              ></i>
+                            </button>
+                          </th>
+                          <th className="fw-bold py-3 border-0">STATUS</th>
+                          <th className="fw-bold py-3 pe-4 border-0 text-end">
+                            ACTIONS
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {payrollList.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={5}
+                              className="text-center py-5 text-muted"
+                            >
+                              <i className="bi bi-people fs-3 d-block mb-2"></i>{" "}
+                              No staff found.
+                            </td>
+                          </tr>
+                        ) : (
+                          payrollList.map((staff: any) => (
+                            <tr
+                              key={staff.staff_id}
+                              className="border-bottom border-light"
+                            >
+                              <td className="ps-4 py-3 fw-bold text-dark">
+                                {staff.staff_name}
+                              </td>
+                              <td className="py-3 text-secondary">
+                                {staff.designation}
+                              </td>
+                              <td className="py-3 fw-bold text-dark">
+                                {isSalaryVisible
+                                  ? `₹${staff.monthly_salary}`
+                                  : "₹ * * * *"}
+                              </td>
+                              <td className="py-3">
+                                <span
+                                  className={`badge rounded-pill px-3 py-2 fw-semibold ${getPayrollStatusStyle(staff.status)}`}
+                                >
+                                  {staff.status}
+                                </span>
+                              </td>
+                              <td className="pe-4 py-3 text-end d-flex align-items-center justify-content-end gap-2">
+                                <select
+                                  className="form-select form-select-sm d-inline-block w-auto border rounded-3 bg-white text-secondary shadow-none cursor-pointer"
+                                  defaultValue={staff.status}
+                                >
+                                  <option value="Pending">Pending</option>
+                                  <option value="Paid">Paid</option>
+                                  <option value="Overdue">Overdue</option>
+                                </select>
+                                {isSalaryVisible && (
+                                  <button
+                                    onClick={() =>
+                                      handleUpdateSalary(
+                                        staff.staff_id,
+                                        staff.monthly_salary,
+                                        staff.staff_name,
+                                      )
+                                    }
+                                    className="btn btn-sm btn-light border rounded-3 py-1 px-2"
+                                  >
+                                    <i className="bi bi-pencil-square text-primary"></i>
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeSection === "stocks" &&
+            (userProfile?.role === "admin" ||
+              userProfile?.role === "manager") && (
+              <div className="fade-in">
+                <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                  <h4 className="fw-bold text-dark mb-0">Inventory Stocks</h4>
+                  <button
+                    onClick={() => setIsAddStockModalOpen(true)}
+                    className="btn btn-primary btn-sm px-4 py-2 fw-medium rounded-3 shadow-sm d-flex align-items-center gap-2"
+                  >
+                    <i className="bi bi-plus-circle"></i> Add Stock
+                  </button>
+                </div>
+                <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
+                  <div className="card-body p-0">
+                    <div className="table-responsive">
+                      <table className="table table-hover align-middle mb-0 text-nowrap">
+                        <thead className="bg-light border-bottom">
+                          <tr
+                            className="text-secondary"
+                            style={{
+                              fontSize: "0.75rem",
+                              letterSpacing: "0.5px",
+                            }}
+                          >
+                            <th className="fw-bold py-3 ps-4 border-0">
+                              STOCK ID
+                            </th>
+                            <th className="fw-bold py-3 border-0">ITEM NAME</th>
+                            <th className="fw-bold py-3 border-0">QUANTITY</th>
+                            <th className="fw-bold py-3 border-0">
+                              TOTAL PRICE
+                            </th>
+                            <th className="fw-bold py-3 pe-4 border-0 text-end">
+                              ACTIONS
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {stocksList.length === 0 ? (
+                            <tr>
+                              <td
+                                colSpan={5}
+                                className="text-center py-5 text-muted"
+                              >
+                                <i className="bi bi-box-seam fs-3 d-block mb-2"></i>{" "}
+                                No stocks found.
+                              </td>
+                            </tr>
+                          ) : (
+                            stocksList.map((stock: any) => (
+                              <tr
+                                key={stock.stock_id}
+                                className="border-bottom border-light"
+                              >
+                                <td className="ps-4 py-3 fw-bold text-secondary small">
+                                  #{stock.stock_id}
+                                </td>
+                                <td className="py-3 fw-bold text-dark">
+                                  {stock.item_name}
+                                </td>
+                                <td className="py-3 text-primary fw-bold bg-primary bg-opacity-10 rounded px-2 text-center d-inline-block mt-2">
+                                  {stock.quantity} {stock.unit}
+                                </td>
+                                <td className="py-3 fw-bold text-dark">
+                                  ₹{stock.price_per_unit}
+                                </td>
+                                <td className="pe-4 py-3 text-end">
+                                  <button
+                                    onClick={() =>
+                                      handleDeleteStock(stock.stock_id)
+                                    }
+                                    className="btn btn-sm btn-white text-danger border shadow-sm rounded-3 py-1 px-2"
+                                  >
+                                    <i className="bi bi-trash3-fill"></i>
+                                  </button>
+                                </td>
+                              </tr>
+                            ))
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+          {activeSection === "reports" && userProfile?.role !== "user" && (
+            <div className="fade-in">
+              <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+                <h4 className="fw-bold text-dark mb-0">
+                  Financial Reports & Analytics
+                </h4>
+                <button
+                  onClick={handleExportPDF}
+                  className="btn btn-outline-primary btn-sm px-4 py-2 fw-medium rounded-3 bg-white shadow-sm d-flex align-items-center gap-2"
+                >
+                  <i className="bi bi-download"></i> Export PDF
+                </button>
+              </div>
+
+              <div className="row g-4 mb-4">
+                <div className="col-lg-8">
+                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4">
+                    <h6 className="fw-bold text-dark mb-4">
+                      Revenue Trend (Last 7 Days)
+                    </h6>
+                    <div style={{ height: "300px", width: "100%" }}>
+                      {revenueLineData.length === 0 ? (
+                        <div className="d-flex flex-column justify-content-center align-items-center h-100 bg-light rounded-4 border border-dashed">
+                          <i
+                            className="bi bi-graph-up text-muted mb-2"
+                            style={{ fontSize: "2rem" }}
+                          ></i>
+                          <h6 className="fw-bold text-secondary mb-1">
+                            No Revenue Data Yet
+                          </h6>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart
+                            data={revenueLineData}
+                            margin={{ top: 5, right: 20, bottom: 5, left: 0 }}
+                          >
+                            <Line
+                              type="monotone"
+                              dataKey="Revenue"
+                              stroke="#0d6efd"
+                              strokeWidth={3}
+                              dot={{ r: 5, fill: "#0d6efd" }}
+                              activeDot={{ r: 8 }}
+                            />
+                            <XAxis
+                              dataKey="name"
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: "#6c757d" }}
+                              dy={10}
+                            />
+                            <YAxis
+                              axisLine={false}
+                              tickLine={false}
+                              tick={{ fontSize: 12, fill: "#6c757d" }}
+                              tickFormatter={(val) => `₹${val}`}
+                              dx={-10}
+                            />
+                            <Tooltip
+                              cursor={{ stroke: "#e9ecef", strokeWidth: 2 }}
+                              contentStyle={{
+                                borderRadius: "10px",
+                                border: "none",
+                                boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
+                              }}
+                              formatter={(value) => [`₹${value}`, "Revenue"]}
+                            />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="col-lg-4">
+                  <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-4">
+                    <h6 className="fw-bold text-dark mb-4">
+                      Expense Distribution
+                    </h6>
+                    <div style={{ height: "250px", width: "100%" }}>
+                      {expensePieData.length === 0 ? (
+                        <div className="d-flex flex-column justify-content-center align-items-center h-100 bg-light rounded-4 border border-dashed">
+                          <i
+                            className="bi bi-pie-chart text-muted mb-2"
+                            style={{ fontSize: "2rem" }}
+                          ></i>
+                          <h6 className="fw-bold text-secondary mb-1">
+                            No Expenses Logged
+                          </h6>
+                        </div>
+                      ) : (
+                        <ResponsiveContainer width="100%" height="100%">
+                          <PieChart>
+                            <Pie
+                              data={expensePieData}
+                              innerRadius={60}
+                              outerRadius={90}
+                              paddingAngle={5}
+                              dataKey="value"
+                            >
+                              {expensePieData.map((entry, index) => (
+                                <Cell
+                                  key={`cell-${index}`}
+                                  fill={COLORS[index % COLORS.length]}
+                                />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              contentStyle={{
+                                borderRadius: "10px",
+                                border: "none",
+                                boxShadow: "0 4px 15px rgba(0,0,0,0.1)",
+                              }}
+                              formatter={(value) => [`₹${value}`, "Amount"]}
+                            />
+                            <Legend
+                              verticalAlign="bottom"
+                              height={36}
+                              iconType="circle"
+                              wrapperStyle={{ fontSize: "12px" }}
+                            />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden mt-4">
+                <div className="card-header bg-white border-bottom p-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <h5 className="fw-bold text-dark mb-0">Expense Ledger</h5>
+                  <button
+                    onClick={() => setIsAddExpenseModalOpen(true)}
+                    className="btn btn-primary btn-sm px-3 fw-medium rounded-3"
+                  >
+                    <i className="bi bi-plus-lg me-1"></i> Add Expense
+                  </button>
+                </div>
+                <div className="card-body p-0">
+                  <div className="table-responsive">
+                    <table className="table table-hover align-middle mb-0 text-nowrap">
+                      <thead className="bg-light border-bottom">
+                        <tr
+                          className="text-secondary"
+                          style={{
+                            fontSize: "0.75rem",
+                            letterSpacing: "0.5px",
+                          }}
+                        >
+                          <th className="fw-bold py-3 ps-4 border-0">DATE</th>
+                          <th className="fw-bold py-3 border-0">CATEGORY</th>
+                          <th className="fw-bold py-3 border-0">DESCRIPTION</th>
+                          <th className="fw-bold py-3 pe-4 border-0 text-end">
+                            AMOUNT
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {reportsList.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={4}
+                              className="text-center py-5 text-muted"
+                            >
+                              <i className="bi bi-receipt fs-3 d-block mb-2"></i>{" "}
+                              No expenses logged yet.
+                            </td>
+                          </tr>
+                        ) : (
+                          reportsList.map((expense: any) => (
+                            <tr
+                              key={expense.expense_id}
+                              className="border-bottom border-light"
+                            >
+                              <td className="ps-4 py-3 fw-semibold text-dark small">
+                                {new Date(
+                                  expense.created_at ||
+                                    expense.expense_date ||
+                                    Date.now(),
+                                ).toLocaleDateString("en-IN", {
+                                  dateStyle: "medium",
+                                })}
+                              </td>
+                              <td className="py-3 text-secondary">
+                                {expense.category}
+                              </td>
+                              <td className="py-3 text-secondary">
+                                {expense.description}
+                              </td>
+                              <td className="pe-4 py-3 text-end fw-bold text-danger">
+                                - ₹{expense.amount}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </main>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .fade-in { animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1); }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .scale-up { animation: scaleUp 0.3s ease forwards; box-shadow: 0 0 15px rgba(13, 110, 253, 0.5); }
+        @keyframes scaleUp { from { transform: scale(1); } to { transform: scale(1.05); } }
+
+        .hover-bg-dark:hover { background-color: rgba(255,255,255,0.05) !important; color: white !important; }
+        .hover-primary:hover { color: #0d6efd !important; }
+        body { background-color: #F8F9FB; }
+        
+        .premium-hover:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(13, 110, 253, 0.12) !important; border-color: rgba(13, 110, 253, 0.3) !important; }
+        .add-btn-hover { transition: all 0.2s ease; }
+        .premium-hover:hover .add-btn-hover { background-color: #0d6efd !important; color: white !important; transform: scale(1.1); }
+
+        .cart-card-premium { border-top: 4px solid #0d6efd !important; }
+        .cart-item-anim { animation: slideInRight 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
+        @keyframes slideInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+
+        .border-dashed { border-style: dashed !important; border-width: 2px !important; border-color: #dee2e6 !important; }
+
+        .payment-card { transition: all 0.2s ease; border: 2px solid transparent; }
+        .payment-card.active { border-color: #0d6efd; background-color: rgba(13, 110, 253, 0.05) !important; }
+        .payment-card:hover:not(.active) { background-color: #f8f9fa !important; border-color: #dee2e6; }
+
+        .btn-gradient { background: linear-gradient(135deg, #0d6efd, #6f42c1); border: none; background-size: 200% auto; transition: all 0.4s ease; }
+        .btn-gradient:hover { background-position: right center; box-shadow: 0 10px 25px rgba(111, 66, 193, 0.4) !important; transform: translateY(-2px); }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #ced4da; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #adb5bd; }
+      `,
+        }}
+      />
+    </div>
+  );
+}
