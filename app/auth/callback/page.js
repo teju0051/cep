@@ -1,47 +1,54 @@
 "use client";
 
 import { useEffect } from "react";
-import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient";
 
 export default function AuthCallbackPage() {
-  const router = useRouter();
-
   useEffect(() => {
-    const handleHashTokens = async () => {
+    const handleDirectTokenInjection = () => {
       const hash = window.location.hash;
 
       if (hash && hash.includes("access_token")) {
         const params = new URLSearchParams(hash.replace("#", "?"));
         const access_token = params.get("access_token");
         const refresh_token = params.get("refresh_token");
+        const expires_at = params.get("expires_at");
 
         if (access_token && refresh_token) {
-          const { error } = await supabase.auth.setSession({
+          // Construct the standard Supabase session storage object layout
+          const supabaseStorageKey = `sb-ooxgzjwtsxepzqtgfcjn-auth-token`;
+
+          const sessionData = {
             access_token,
             refresh_token,
-          });
+            expires_at: expires_at
+              ? Number(expires_at)
+              : Math.floor(Date.now() / 1000) + 3600,
+            token_type: "bearer",
+            user: null, // Will be fetched lazily by the client on the dashboard
+          };
 
-          if (!error) {
-            router.replace("/dashboard");
-            return;
+          // Manually save to local storage so Supabase detects it instantly on the next page
+          try {
+            localStorage.setItem(
+              supabaseStorageKey,
+              JSON.stringify(sessionData),
+            );
+          } catch (e) {
+            console.error("Storage error", e);
           }
+
+          // Hard redirect to dashboard immediately via window.location to force a full reload with the session active
+          window.location.href = "/dashboard";
+          return;
         }
       }
 
-      // Fallback check
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (session) {
-        router.replace("/dashboard");
-      } else {
-        router.replace("/login");
-      }
+      // Fallback if no hash tokens are present
+      window.location.href = "/login";
     };
 
-    handleHashTokens();
-  }, [router]);
+    handleDirectTokenInjection();
+  }, []);
 
   return (
     <div className="min-vh-100 d-flex flex-column justify-content-center align-items-center bg-light">
