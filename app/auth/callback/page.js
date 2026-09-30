@@ -8,48 +8,39 @@ export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const handleAuth = async () => {
-      // 1. Check for PKCE authorization code in query params (?code=...)
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get("code");
+    const handleHashTokens = async () => {
+      const hash = window.location.hash;
 
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (!error) {
-          router.replace("/dashboard");
-          return;
+      if (hash && hash.includes("access_token")) {
+        const params = new URLSearchParams(hash.replace("#", "?"));
+        const access_token = params.get("access_token");
+        const refresh_token = params.get("refresh_token");
+
+        if (access_token && refresh_token) {
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+
+          if (!error) {
+            router.replace("/dashboard");
+            return;
+          }
         }
       }
 
-      // 2. Fallback: Check if session is already active or available via hash
+      // Fallback check
       const {
         data: { session },
       } = await supabase.auth.getSession();
       if (session) {
         router.replace("/dashboard");
       } else {
-        // Give it one brief moment to catch up if running async state changes
-        const {
-          data: { subscription },
-        } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === "SIGNED_IN" && session) {
-            router.replace("/dashboard");
-          }
-        });
-
-        // Safety fallback timer
-        const timer = setTimeout(() => {
-          router.replace("/login");
-        }, 3000);
-
-        return () => {
-          subscription.unsubscribe();
-          clearTimeout(timer);
-        };
+        router.replace("/login");
       }
     };
 
-    handleAuth();
+    handleHashTokens();
   }, [router]);
 
   return (
