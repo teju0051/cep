@@ -5,7 +5,7 @@ import "./globals.css";
 import BootstrapClient from "./components/BootstrapClient";
 
 export const metadata: Metadata = {
-  title: "Seema Laundry Services",
+  title: "WashNora Laundry Services",
   description:
     "Fresh clothes, hassle free. Premium cleaning and fast delivery at your doorstep.",
 };

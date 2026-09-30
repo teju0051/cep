@@ -18,7 +18,6 @@ import {
 export default function LaundryERPApp() {
   const [isMounted, setIsMounted] = useState<boolean>(false);
   const [isAppLoading, setIsAppLoading] = useState<boolean>(true);
-
   const [activeSection, setActiveSection] = useState<string>("dashboard");
 
   // UI States
@@ -30,7 +29,7 @@ export default function LaundryERPApp() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [userProfile, setUserProfile] = useState<any>(null);
 
-  // Search & Filter States
+  // Search & Filter
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("All");
 
@@ -48,9 +47,11 @@ export default function LaundryERPApp() {
   const [isAddStockModalOpen, setIsAddStockModalOpen] =
     useState<boolean>(false);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState<boolean>(false);
-  const [editingServiceId, setEditingServiceId] = useState<any>(null);
 
-  // Form States
+  const [editingServiceId, setEditingServiceId] = useState<any>(null);
+  const [editingStockId, setEditingStockId] = useState<any>(null);
+
+  // Forms
   const [onboardingData, setOnboardingData] = useState<any>({
     name: "",
     phone: "",
@@ -67,14 +68,15 @@ export default function LaundryERPApp() {
     amount: "",
   });
   const [newStock, setNewStock] = useState<any>({
+    id: "",
     name: "",
     quantity: "",
-    unit: "kg",
-    price: "",
+    unit: "pcs",
+    pricePerUnit: "",
   });
   const [serviceForm, setServiceForm] = useState<any>({ name: "", price: "" });
 
-  // Data States
+  // Data
   const [clothCatalog, setClothCatalog] = useState<any[]>([]);
   const [cart, setCart] = useState<any[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<string>("Cod");
@@ -96,7 +98,7 @@ export default function LaundryERPApp() {
   const [reportsList, setReportsList] = useState<any[]>([]);
   const [stocksList, setStocksList] = useState<any[]>([]);
 
-  // --- ARYA AI STATES & REFS ---
+  // ARYA AI States
   const [aryaState, setAryaState] = useState<
     "dormant" | "listening" | "processing"
   >("dormant");
@@ -144,7 +146,6 @@ export default function LaundryERPApp() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Live Clock Effect
   useEffect(() => {
     setCurrentTime(new Date());
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
@@ -194,8 +195,7 @@ export default function LaundryERPApp() {
         .from("laundry_services")
         .select("*")
         .order("created_at", { ascending: true });
-      if (fetchedServices && fetchedServices.length > 0)
-        setClothCatalog(fetchedServices);
+      if (fetchedServices) setClothCatalog(fetchedServices);
 
       let ordersQuery = supabase
         .from("laundry_orders")
@@ -324,6 +324,280 @@ export default function LaundryERPApp() {
     ]);
   };
 
+  // ================= PAYROLL STATUS UPDATE =================
+  const handlePayrollStatusUpdate = async (staffId: any, newStatus: string) => {
+    const { error } = await supabase
+      .from("staff_payroll")
+      .update({ status: newStatus })
+      .eq("staff_id", staffId);
+    if (!error) {
+      setPayrollList((prev: any[]) =>
+        prev.map((s) =>
+          s.staff_id === staffId ? { ...s, status: newStatus } : s,
+        ),
+      );
+      Swal.fire({
+        icon: "success",
+        title: "Status Updated",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 1500,
+      });
+    } else {
+      Swal.fire("Error", error.message, "error");
+    }
+  };
+
+  // ================= INVENTORY LOGIC (EDIT, UPDATE, AUTO EXPENSE, ADJUST) =================
+  const openAddStockModal = () => {
+    setEditingStockId(null);
+    setNewStock({
+      id: "",
+      name: "",
+      quantity: "",
+      unit: "pcs",
+      pricePerUnit: "",
+    });
+    setIsAddStockModalOpen(true);
+  };
+
+  const openEditStockModal = (stock: any) => {
+    setEditingStockId(stock.stock_id);
+    setNewStock({
+      id: stock.stock_id,
+      name: stock.item_name,
+      quantity: stock.quantity,
+      unit: "pcs",
+      pricePerUnit: stock.price_per_unit || "",
+    });
+    setIsAddStockModalOpen(true);
+  };
+
+  const handleStockAdjust = async (stock: any, change: number) => {
+    const newQty = parseFloat(stock.quantity) + change;
+    if (newQty < 0) return;
+
+    const { error } = await supabase
+      .from("inventory_stocks")
+      .update({ quantity: newQty })
+      .eq("stock_id", stock.stock_id);
+    if (!error) {
+      setStocksList((prev: any[]) =>
+        prev.map((s) =>
+          s.stock_id === stock.stock_id ? { ...s, quantity: newQty } : s,
+        ),
+      );
+
+      // Auto-log expense if stock is increasing
+      if (change > 0 && stock.price_per_unit > 0) {
+        const cost = change * parseFloat(stock.price_per_unit);
+        const { data: exp } = await supabase
+          .from("business_expenses")
+          .insert([
+            {
+              category: "Detergent/Chemicals",
+              description: `Auto-restock (+${change}): ${stock.item_name}`,
+              amount: cost,
+            },
+          ])
+          .select();
+
+        if (exp) {
+          setReportsList((prev: any[]) => [exp[0], ...prev]);
+          setDashboardStats((prev: any) => ({
+            ...prev,
+            totalExpenses: prev.totalExpenses + cost,
+          }));
+          Swal.fire({
+            icon: "info",
+            title: `₹${cost} Expense Auto-Logged`,
+            toast: true,
+            position: "bottom-end",
+            showConfirmButton: false,
+            timer: 3000,
+          });
+        }
+      }
+    }
+  };
+
+  const handleStockSet = async (stock: any, newQtyStr: string) => {
+    const newQty = parseFloat(newQtyStr);
+    if (isNaN(newQty) || newQty < 0) return;
+
+    const diff = newQty - parseFloat(stock.quantity);
+    if (diff === 0) return;
+
+    const { error } = await supabase
+      .from("inventory_stocks")
+      .update({ quantity: newQty })
+      .eq("stock_id", stock.stock_id);
+    if (!error) {
+      setStocksList((prev: any[]) =>
+        prev.map((s) =>
+          s.stock_id === stock.stock_id ? { ...s, quantity: newQty } : s,
+        ),
+      );
+
+      if (diff > 0 && stock.price_per_unit > 0) {
+        const cost = diff * parseFloat(stock.price_per_unit);
+        const { data: exp } = await supabase
+          .from("business_expenses")
+          .insert([
+            {
+              category: "Detergent/Chemicals",
+              description: `Manual-restock (+${diff}): ${stock.item_name}`,
+              amount: cost,
+            },
+          ])
+          .select();
+
+        if (exp) {
+          setReportsList((prev: any[]) => [exp[0], ...prev]);
+          setDashboardStats((prev: any) => ({
+            ...prev,
+            totalExpenses: prev.totalExpenses + cost,
+          }));
+          Swal.fire({
+            icon: "info",
+            title: `₹${cost} Expense Auto-Logged`,
+            toast: true,
+            position: "bottom-end",
+            showConfirmButton: false,
+            timer: 3000,
+          });
+        }
+      }
+    }
+  };
+
+  const handleAddStockSubmit = async (e: any) => {
+    e.preventDefault();
+    if (editingStockId) {
+      const updatePayload: any = {
+        item_name: newStock.name,
+        price_per_unit: parseFloat(newStock.pricePerUnit),
+      };
+
+      if (newStock.id && newStock.id !== editingStockId) {
+        updatePayload.stock_id = newStock.id;
+      }
+
+      const { data, error } = await supabase
+        .from("inventory_stocks")
+        .update(updatePayload)
+        .eq("stock_id", editingStockId)
+        .select();
+
+      if (!error && data) {
+        setStocksList((prev: any[]) =>
+          prev.map((s) =>
+            s.stock_id === editingStockId
+              ? {
+                  ...s,
+                  stock_id: data[0].stock_id,
+                  item_name: newStock.name,
+                  price_per_unit: parseFloat(newStock.pricePerUnit),
+                }
+              : s,
+          ),
+        );
+        setIsAddStockModalOpen(false);
+        Swal.fire({
+          icon: "success",
+          title: "Stock Updated!",
+          showConfirmButton: false,
+          timer: 1500,
+        });
+      } else {
+        Swal.fire("Error", error?.message || "Failed to update", "error");
+      }
+    } else {
+      const insertPayload: any = {
+        item_name: newStock.name,
+        quantity: parseFloat(newStock.quantity),
+        unit: "pcs",
+        price_per_unit: parseFloat(newStock.pricePerUnit),
+      };
+
+      if (newStock.id) {
+        insertPayload.stock_id = newStock.id;
+      }
+
+      const { data, error } = await supabase
+        .from("inventory_stocks")
+        .insert([insertPayload])
+        .select();
+
+      if (!error && data) {
+        setStocksList((prev: any[]) => [data[0], ...prev]);
+        const cost =
+          parseFloat(newStock.quantity) * parseFloat(newStock.pricePerUnit);
+        if (cost > 0) {
+          const { data: exp } = await supabase
+            .from("business_expenses")
+            .insert([
+              {
+                category: "Detergent/Chemicals",
+                description: `Initial Stock: ${newStock.quantity} pcs of ${newStock.name}`,
+                amount: cost,
+              },
+            ])
+            .select();
+          if (exp) {
+            setReportsList((prev) => [exp[0], ...prev]);
+            setDashboardStats((prev) => ({
+              ...prev,
+              totalExpenses: prev.totalExpenses + cost,
+            }));
+          }
+        }
+        setNewStock({
+          id: "",
+          name: "",
+          quantity: "",
+          unit: "pcs",
+          pricePerUnit: "",
+        });
+        setIsAddStockModalOpen(false);
+        Swal.fire({
+          icon: "success",
+          title: "Stock Added!",
+          showConfirmButton: false,
+          timer: 1500,
+        });
+      } else {
+        Swal.fire("Error", error?.message || "Failed to add", "error");
+      }
+    }
+  };
+
+  const handleDeleteStock = async (stockId: any) => {
+    const { isConfirmed } = await Swal.fire({
+      title: "Delete?",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#dc3545",
+      confirmButtonText: "Yes",
+    });
+    if (isConfirmed) {
+      const { error } = await supabase
+        .from("inventory_stocks")
+        .delete()
+        .eq("stock_id", stockId);
+      if (!error) {
+        setStocksList(stocksList.filter((s: any) => s.stock_id !== stockId));
+        Swal.fire({
+          icon: "success",
+          title: "Deleted!",
+          showConfirmButton: false,
+          timer: 1000,
+        });
+      }
+    }
+  };
+
   const handleOrderStatusUpdate = async (orderId: any, newStatus: any) => {
     if (newStatus === "Rejected") {
       const { value: formValues, isDismissed } = await Swal.fire({
@@ -374,6 +648,7 @@ export default function LaundryERPApp() {
     }
   };
 
+  // Realtime Listeners
   useEffect(() => {
     if (!userProfile) return;
     const channel = supabase
@@ -441,17 +716,12 @@ export default function LaundryERPApp() {
         },
       )
       .subscribe();
-
     return () => {
       supabase.removeChannel(channel);
     };
   }, [userProfile]);
 
-  useEffect(() => {
-    updateDashboardStats(ordersList);
-  }, [ordersList]);
-
-  // ================= ARYA "HEY GOOGLE" WAKE WORD LISTENER =================
+  // ================= ARYA AI MANUAL & WAKE WORD =================
   const playWakeChime = () => {
     try {
       const AudioContext =
@@ -471,7 +741,7 @@ export default function LaundryERPApp() {
       osc.start();
       osc.stop(ctx.currentTime + 0.3);
     } catch (e) {
-      console.error("Audio block", e);
+      console.error(e);
     }
   };
 
@@ -480,11 +750,8 @@ export default function LaundryERPApp() {
     onEndCallback?: () => void,
   ) => {
     try {
-      if (recognitionRef.current) {
-        recognitionRef.current.abort();
-      }
+      if (recognitionRef.current) recognitionRef.current.abort();
     } catch (e) {}
-
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.onend = () => {
       if (onEndCallback) onEndCallback();
@@ -494,19 +761,26 @@ export default function LaundryERPApp() {
         } catch (e) {}
       }
     };
-    utterance.onerror = () => {
-      if (userProfile?.role === "admin" && recognitionRef.current) {
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const toggleAryaManually = () => {
+    if (aryaState === "dormant") {
+      setAryaState("listening");
+      playWakeChime();
+      speakWithMicSuppression("I am listening. How can I help?");
+    } else {
+      setAryaState("dormant");
+      if (recognitionRef.current) {
         try {
-          recognitionRef.current.start();
+          recognitionRef.current.abort();
         } catch (e) {}
       }
-    };
-    window.speechSynthesis.speak(utterance);
+    }
   };
 
   useEffect(() => {
     if (userProfile?.role !== "admin") return;
-
     const SpeechRecognition =
       (window as any).SpeechRecognition ||
       (window as any).webkitSpeechRecognition;
@@ -524,13 +798,11 @@ export default function LaundryERPApp() {
         item: s.item_name,
         qty: `${s.quantity} ${s.unit}`,
       }));
-      const ordersContext = ordersRef.current
-        .slice(0, 10)
-        .map((o) => ({
-          id: o.order_id,
-          customer: o.customer_name,
-          status: o.status,
-        }));
+      const ordersContext = ordersRef.current.slice(0, 10).map((o) => ({
+        id: o.order_id,
+        customer: o.customer_name,
+        status: o.status,
+      }));
       const reportsContext = reportsRef.current
         .slice(0, 10)
         .map((r) => ({ category: r.category, amount: r.amount }));
@@ -546,66 +818,17 @@ export default function LaundryERPApp() {
             reportsContext,
           }),
         });
-
         const data = await response.json();
-
         speakWithMicSuppression(data.message, () => {
           setAryaState("dormant");
         });
 
-        // Map AI Tools to Supabase Actions
         if (data.action === "UPDATE_ORDER") {
           handleOrderStatusUpdate(Number(data.orderId), data.newStatus);
         } else if (data.action === "NAVIGATE") {
           setActiveSection(data.section);
-        } else if (data.action === "ADD_INVENTORY") {
-          const { data: newStock, error } = await supabase
-            .from("inventory_stocks")
-            .insert([
-              {
-                item_name: data.item.itemName,
-                quantity: data.item.quantity,
-                unit: data.item.unit,
-                price_per_unit: data.item.price,
-              },
-            ])
-            .select();
-          if (!error && newStock) {
-            setStocksList((prev: any[]) => [newStock[0], ...prev]);
-            Swal.fire({
-              icon: "success",
-              title: "Stock Added via Voice!",
-              toast: true,
-              position: "top-end",
-              showConfirmButton: false,
-              timer: 3000,
-            });
-          }
-        } else if (data.action === "ADD_EXPENSE") {
-          const { data: newExp, error } = await supabase
-            .from("business_expenses")
-            .insert([
-              {
-                category: data.expense.category,
-                description: data.expense.description,
-                amount: data.expense.amount,
-              },
-            ])
-            .select();
-          if (!error && newExp) {
-            setReportsList((prev: any[]) => [newExp[0], ...prev]);
-            Swal.fire({
-              icon: "success",
-              title: "Expense Logged via Voice!",
-              toast: true,
-              position: "top-end",
-              showConfirmButton: false,
-              timer: 3000,
-            });
-          }
         }
       } catch (error) {
-        console.error("Arya API Error:", error);
         setAryaState("dormant");
       }
     };
@@ -633,10 +856,9 @@ export default function LaundryERPApp() {
           const commandAfterWake = wakeWordUsed
             ? transcript.split(wakeWordUsed)[1]?.trim()
             : "";
-
-          if (commandAfterWake && commandAfterWake.length > 3) {
+          if (commandAfterWake && commandAfterWake.length > 3)
             executeAryaCommand(commandAfterWake);
-          } else {
+          else {
             setAryaState("listening");
             speakWithMicSuppression("I am listening.");
           }
@@ -669,7 +891,6 @@ export default function LaundryERPApp() {
     };
   }, [userProfile?.role]);
 
-  // ================= UTILITY FUNCTIONS =================
   const handleExportPDF = () => window.print();
 
   const handleContactSupport = () => {
@@ -699,7 +920,7 @@ export default function LaundryERPApp() {
       else if (result.isConfirmed)
         Swal.fire({
           icon: "error",
-          title: "Incorrect Password",
+          title: "Incorrect",
           confirmButtonColor: "#0a1128",
         });
     });
@@ -797,11 +1018,7 @@ export default function LaundryERPApp() {
 
   const handleCheckout = async () => {
     if (cart.length === 0)
-      return Swal.fire(
-        "Empty Cart",
-        "Please add items before placing an order.",
-        "warning",
-      );
+      return Swal.fire("Empty Cart", "Add items first.", "warning");
     const totalAmount = calculateCartTotal();
     const orderDetailsSummary = cart
       .map((c: any) => `${c.name} (x${c.qty})`)
@@ -814,8 +1031,7 @@ export default function LaundryERPApp() {
         key: "rzp_live_TTaH03kARMoEdZ",
         amount: totalAmount * 100,
         currency: "INR",
-        name: "Seema Laundry Services",
-        description: "Order Payment",
+        name: "WashNora Laundry Services",
         handler: async function (response: any) {
           const { data, error } = await supabase
             .from("laundry_orders")
@@ -824,10 +1040,9 @@ export default function LaundryERPApp() {
                 customer_name: userProfile?.full_name || "Customer",
                 customer_phone: userProfile?.phone || "N/A",
                 location: userProfile?.address || "Main Location",
-                service_type: `${orderDetailsSummary} [Paid via Razorpay: ${response.razorpay_payment_id}]`,
+                service_type: `${orderDetailsSummary} [Razorpay: ${response.razorpay_payment_id}]`,
                 total_amount: totalAmount,
                 status: "Received",
-                rejection_reason: null,
               },
             ])
             .select();
@@ -856,10 +1071,9 @@ export default function LaundryERPApp() {
             customer_name: userProfile?.full_name || "Customer",
             customer_phone: userProfile?.phone || "N/A",
             location: userProfile?.address || "Main Location",
-            service_type: `${orderDetailsSummary} [Pay on Delivery]`,
+            service_type: `${orderDetailsSummary} [COD]`,
             total_amount: totalAmount,
             status: "Pickup",
-            rejection_reason: null,
           },
         ])
         .select();
@@ -868,7 +1082,6 @@ export default function LaundryERPApp() {
         Swal.fire({
           icon: "success",
           title: "Order Placed!",
-          text: `Order ID #${data[0].order_id}`,
           timer: 2500,
           showConfirmButton: false,
         });
@@ -896,7 +1109,7 @@ export default function LaundryERPApp() {
       setIsAddStaffModalOpen(false);
       Swal.fire({
         icon: "success",
-        title: "Staff Added!",
+        title: "Added!",
         showConfirmButton: false,
         timer: 1500,
       });
@@ -917,66 +1130,18 @@ export default function LaundryERPApp() {
       .select();
     if (!error && data) {
       setReportsList((prev: any[]) => [data[0], ...prev]);
+      setDashboardStats((prev: any) => ({
+        ...prev,
+        totalExpenses: prev.totalExpenses + parseFloat(newExpense.amount),
+      }));
       setNewExpense({ category: "", description: "", amount: "" });
       setIsAddExpenseModalOpen(false);
       Swal.fire({
         icon: "success",
-        title: "Expense Logged!",
+        title: "Logged!",
         showConfirmButton: false,
         timer: 1500,
       });
-    }
-  };
-
-  const handleAddStockSubmit = async (e: any) => {
-    e.preventDefault();
-    const { data, error } = await supabase
-      .from("inventory_stocks")
-      .insert([
-        {
-          item_name: newStock.name,
-          quantity: parseFloat(newStock.quantity),
-          unit: newStock.unit,
-          price_per_unit: parseFloat(newStock.price),
-        },
-      ])
-      .select();
-    if (!error && data) {
-      setStocksList((prev: any[]) => [data[0], ...prev]);
-      setNewStock({ name: "", quantity: "", unit: "kg", price: "" });
-      setIsAddStockModalOpen(false);
-      Swal.fire({
-        icon: "success",
-        title: "Stock Added!",
-        showConfirmButton: false,
-        timer: 1500,
-      });
-    }
-  };
-
-  const handleDeleteStock = async (stockId: any) => {
-    const { isConfirmed } = await Swal.fire({
-      title: "Are you sure?",
-      text: "You are about to delete this stock item.",
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#dc3545",
-      confirmButtonText: "Yes, delete it!",
-    });
-    if (isConfirmed) {
-      const { error } = await supabase
-        .from("inventory_stocks")
-        .delete()
-        .eq("stock_id", stockId);
-      if (!error) {
-        setStocksList(stocksList.filter((s: any) => s.stock_id !== stockId));
-        Swal.fire({
-          icon: "success",
-          title: "Deleted!",
-          showConfirmButton: false,
-          timer: 1000,
-        });
-      }
     }
   };
 
@@ -1039,28 +1204,20 @@ export default function LaundryERPApp() {
   const handleDeleteService = async (serviceId: any) => {
     const { isConfirmed } = await Swal.fire({
       title: "Delete Service?",
-      text: "This removes it from the catalog.",
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#dc3545",
-      confirmButtonText: "Yes, remove it!",
+      confirmButtonText: "Yes",
     });
     if (isConfirmed) {
       const { error } = await supabase
         .from("laundry_services")
         .delete()
         .eq("service_id", serviceId);
-      if (!error) {
+      if (!error)
         setClothCatalog(
           clothCatalog.filter((s: any) => s.service_id !== serviceId),
         );
-        Swal.fire({
-          icon: "success",
-          title: "Deleted!",
-          showConfirmButton: false,
-          timer: 1000,
-        });
-      }
     }
   };
 
@@ -1071,7 +1228,6 @@ export default function LaundryERPApp() {
     setIsNotificationOpen(!isNotificationOpen);
   };
   const unreadCount = notifications.filter((n: any) => !n.read).length;
-
   const sidebarWidth = isMobile
     ? "260px"
     : isSidebarCollapsed
@@ -1126,6 +1282,7 @@ export default function LaundryERPApp() {
     return matchesSearch && matchesStatus;
   });
 
+  // Recharts Helper Data
   const getExpensePieData = () => {
     const categoryTotals: any = {};
     reportsList.forEach((exp: any) => {
@@ -1154,8 +1311,9 @@ export default function LaundryERPApp() {
       .map((date) => ({ name: date, Revenue: dataMap[date] }));
   };
 
-  const revenueLineData = getRevenueLineData();
   const expensePieData = getExpensePieData();
+  const revenueLineData = getRevenueLineData();
+  const lowStocks = stocksList.filter((s) => parseFloat(s.quantity) <= 10);
 
   if (!isMounted) return null;
 
@@ -1169,9 +1327,7 @@ export default function LaundryERPApp() {
           className="spinner-border text-primary shadow-sm mb-3"
           style={{ width: "4rem", height: "4rem", borderWidth: "0.35em" }}
           role="status"
-        >
-          <span className="visually-hidden">Loading...</span>
-        </div>
+        ></div>
         <h3 className="fw-bold text-dark" style={{ letterSpacing: "0.5px" }}>
           Laundry <span className="text-primary">ERP</span>
         </h3>
@@ -1519,13 +1675,31 @@ export default function LaundryERPApp() {
             style={{ width: "90%", maxWidth: "450px" }}
           >
             <div className="d-flex justify-content-between align-items-center mb-4">
-              <h5 className="fw-bold mb-0 text-dark">Add Inventory Stock</h5>
+              <h5 className="fw-bold mb-0 text-dark">
+                {editingStockId
+                  ? "Edit Inventory Stock"
+                  : "Add Inventory Stock"}
+              </h5>
               <button
                 onClick={() => setIsAddStockModalOpen(false)}
                 className="btn-close"
               ></button>
             </div>
             <form onSubmit={handleAddStockSubmit}>
+              <div className="mb-3">
+                <label className="form-label text-secondary small fw-semibold">
+                  Stock ID / Code
+                </label>
+                <input
+                  type="text"
+                  className="form-control bg-light border-0 py-2"
+                  value={newStock.id}
+                  onChange={(e: any) =>
+                    setNewStock({ ...newStock, id: e.target.value })
+                  }
+                  placeholder="Auto-generated if left blank"
+                />
+              </div>
               <div className="mb-3">
                 <label className="form-label text-secondary small fw-semibold">
                   Item Name
@@ -1541,10 +1715,10 @@ export default function LaundryERPApp() {
                   placeholder="e.g. Ariel Detergent"
                 />
               </div>
-              <div className="row">
-                <div className="col-8 mb-3">
+              {!editingStockId && (
+                <div className="mb-3">
                   <label className="form-label text-secondary small fw-semibold">
-                    Quantity
+                    Initial Quantity (pcs)
                   </label>
                   <input
                     type="number"
@@ -1557,44 +1731,27 @@ export default function LaundryERPApp() {
                     placeholder="10"
                   />
                 </div>
-                <div className="col-4 mb-3">
-                  <label className="form-label text-secondary small fw-semibold">
-                    Unit
-                  </label>
-                  <select
-                    className="form-select bg-light border-0 py-2"
-                    value={newStock.unit}
-                    onChange={(e: any) =>
-                      setNewStock({ ...newStock, unit: e.target.value })
-                    }
-                  >
-                    <option value="kg">kg</option>
-                    <option value="Ltr">Ltr</option>
-                    <option value="ml">ml</option>
-                    <option value="pcs">pcs</option>
-                  </select>
-                </div>
-              </div>
+              )}
               <div className="mb-4">
                 <label className="form-label text-secondary small fw-semibold">
-                  Total Cost (₹)
+                  Base Price (per 1 pcs in ₹)
                 </label>
                 <input
                   type="number"
                   className="form-control bg-light border-0 py-2"
                   required
-                  value={newStock.price}
+                  value={newStock.pricePerUnit}
                   onChange={(e: any) =>
-                    setNewStock({ ...newStock, price: e.target.value })
+                    setNewStock({ ...newStock, pricePerUnit: e.target.value })
                   }
-                  placeholder="1500"
+                  placeholder="e.g. 220"
                 />
               </div>
               <button
                 type="submit"
                 className="btn btn-primary w-100 fw-bold py-2 rounded-3"
               >
-                Save Stock Item
+                {editingStockId ? "Update Stock Details" : "Save Stock Item"}
               </button>
             </form>
           </div>
@@ -2025,7 +2182,7 @@ export default function LaundryERPApp() {
           minHeight: "100vh",
         }}
       >
-        {/* HEADER (WITH RESTORED POLICY LINKS & LIVE CLOCK) */}
+        {/* HEADER */}
         <header
           className="bg-white d-flex justify-content-between align-items-center px-3 px-md-4 py-3 sticky-top border-bottom"
           style={{ zIndex: 1030 }}
@@ -2041,7 +2198,6 @@ export default function LaundryERPApp() {
           </div>
 
           <div className="d-flex align-items-center gap-2 gap-md-4">
-            {/* Policy Links */}
             <div className="d-none d-xl-flex align-items-center gap-3 border-end pe-3 me-1">
               <a
                 href="/tos"
@@ -2068,7 +2224,6 @@ export default function LaundryERPApp() {
               )}
             </div>
 
-            {/* Live Date & Time Pill */}
             {currentTime && (
               <div className="d-none d-md-flex align-items-center text-secondary border rounded-pill px-3 py-2 small fw-medium bg-white">
                 <i className="bi bi-calendar3 me-2 text-dark"></i>
@@ -2087,16 +2242,18 @@ export default function LaundryERPApp() {
               </div>
             )}
 
-            {/* ARYA AI WIDGET (DYNAMIC STATE UI) */}
+            {/* ARYA AI WIDGET - MANUAL TOGGLE */}
             {userProfile?.role === "admin" && (
               <div
-                className={`d-none d-md-flex align-items-center gap-2 border rounded-pill px-3 py-2 shadow-sm transition-all ${
+                onClick={toggleAryaManually}
+                className={`d-none d-md-flex align-items-center gap-2 border rounded-pill px-3 py-2 shadow-sm transition-all cursor-pointer ${
                   aryaState === "listening"
                     ? "bg-primary text-white scale-up"
                     : aryaState === "processing"
                       ? "bg-warning text-dark"
-                      : "bg-light text-secondary"
+                      : "bg-light text-secondary hover-bg-light"
                 }`}
+                title="Click to toggle Arya AI"
               >
                 {aryaState === "listening" ? (
                   <>
@@ -2110,8 +2267,8 @@ export default function LaundryERPApp() {
                   </>
                 ) : (
                   <>
-                    <i className="bi bi-mic-fill"></i>
-                    <span className="small fw-medium">Say "Hey Arya"</span>
+                    <i className="bi bi-mic-fill text-primary"></i>
+                    <span className="small fw-medium">Arya AI Ready</span>
                   </>
                 )}
               </div>
@@ -2201,6 +2358,7 @@ export default function LaundryERPApp() {
         </header>
 
         <div className="container-fluid p-3 p-md-4 flex-grow-1">
+          {/* ================= DASHBOARD SECTION ================= */}
           {activeSection === "dashboard" && (
             <div className="fade-in">
               <div className="mb-4 d-flex justify-content-between align-items-center flex-wrap gap-3">
@@ -2214,10 +2372,40 @@ export default function LaundryERPApp() {
                 </div>
               </div>
 
+              {/* STOCK ALERTS (STATIC DISPLAY) */}
+              {userProfile?.role !== "user" && lowStocks.length > 0 && (
+                <div className="d-flex flex-wrap gap-2 mb-4">
+                  {lowStocks.map((s) => {
+                    const qty = parseFloat(s.quantity);
+                    if (qty === 0) {
+                      return (
+                        <div
+                          key={s.stock_id}
+                          className="badge bg-danger text-white py-2 px-3 shadow-sm border border-danger"
+                        >
+                          <i className="bi bi-exclamation-triangle-fill me-2"></i>{" "}
+                          {s.item_name} Out of stock
+                        </div>
+                      );
+                    } else {
+                      return (
+                        <div
+                          key={s.stock_id}
+                          className="badge bg-warning text-dark py-2 px-3 shadow-sm border border-warning"
+                        >
+                          <i className="bi bi-exclamation-circle-fill me-2"></i>{" "}
+                          {s.item_name} is low
+                        </div>
+                      );
+                    }
+                  })}
+                </div>
+              )}
+
               {userProfile?.role !== "user" && (
                 <>
                   <div className="row g-3 g-md-4 mb-4">
-                    <div className="col-12 col-md-4">
+                    <div className="col-12 col-md-3">
                       <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-primary premium-hover transition-all">
                         <p className="mb-1 fw-semibold text-secondary small text-uppercase">
                           Today's Revenue
@@ -2232,7 +2420,7 @@ export default function LaundryERPApp() {
                         </div>
                       </div>
                     </div>
-                    <div className="col-12 col-md-4">
+                    <div className="col-12 col-md-3">
                       <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-success premium-hover transition-all">
                         <p className="mb-1 fw-semibold text-secondary small text-uppercase">
                           This Month
@@ -2247,7 +2435,7 @@ export default function LaundryERPApp() {
                         </div>
                       </div>
                     </div>
-                    <div className="col-12 col-md-4">
+                    <div className="col-12 col-md-3">
                       <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-warning premium-hover transition-all">
                         <p className="mb-1 fw-semibold text-secondary small text-uppercase">
                           This Year
@@ -2259,6 +2447,18 @@ export default function LaundryERPApp() {
                           <span className="badge bg-light text-secondary border rounded-pill small">
                             {dashboardStats.yearOrders} Orders
                           </span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-3">
+                      <div className="card border-0 shadow-sm rounded-4 h-100 bg-white p-3 p-md-4 border-start border-4 border-danger premium-hover transition-all">
+                        <p className="mb-1 fw-semibold text-secondary small text-uppercase">
+                          Total Expenses
+                        </p>
+                        <div className="d-flex align-items-center gap-2">
+                          <h3 className="fw-bold text-dark mb-0">
+                            ₹{dashboardStats.totalExpenses}
+                          </h3>
                         </div>
                       </div>
                     </div>
@@ -2342,6 +2542,9 @@ export default function LaundryERPApp() {
                           ? "Your Recent Orders"
                           : "Recent Live Orders"}
                       </h5>
+                      <small className="text-secondary d-block mt-n1">
+                        Track all your live orders in real-time
+                      </small>
                     </div>
                   </div>
                   <div className="d-flex gap-2">
@@ -2367,8 +2570,8 @@ export default function LaundryERPApp() {
                     </div>
                   ) : (
                     <div className="table-responsive">
-                      <table className="table table-hover align-middle mb-0 text-nowrap">
-                        <thead className="bg-light border-bottom border-top">
+                      <table className="table table-hover table-custom align-middle mb-0 text-nowrap">
+                        <thead className="bg-light bg-opacity-75 border-bottom">
                           <tr
                             className="text-secondary"
                             style={{
@@ -2393,7 +2596,7 @@ export default function LaundryERPApp() {
                           {ordersList.slice(0, 5).map((order: any) => (
                             <tr
                               key={order.order_id}
-                              className="border-bottom border-light"
+                              className="border-bottom border-light hover-shadow-sm transition-all"
                             >
                               <td className="ps-4 py-3 fw-bold text-dark">
                                 {userProfile?.role !== "user" ? (
@@ -2429,10 +2632,12 @@ export default function LaundryERPApp() {
                                   </span>
                                 )}
                                 <span className="text-secondary small">
+                                  <i className="bi bi-telephone-fill me-1 opacity-50"></i>
                                   {order.customer_phone}
                                 </span>
                               </td>
                               <td className="py-3 text-secondary small">
+                                <i className="bi bi-geo-alt-fill text-muted me-1"></i>
                                 {order.location}
                               </td>
                               <td className="py-3 fw-bold text-dark">
@@ -2440,7 +2645,7 @@ export default function LaundryERPApp() {
                               </td>
                               <td className="pe-4 py-3 text-start">
                                 <span
-                                  className={`badge rounded-pill px-3 py-2 fw-semibold ${getOrderStatusStyle(order.status)}`}
+                                  className={`badge rounded-pill px-3 py-2 fw-semibold shadow-sm ${getOrderStatusStyle(order.status)}`}
                                 >
                                   {order.status}
                                 </span>
@@ -2456,6 +2661,7 @@ export default function LaundryERPApp() {
             </div>
           )}
 
+          {/* ================= SERVICES SECTION ================= */}
           {activeSection === "services" &&
             (userProfile?.role === "admin" ||
               userProfile?.role === "manager") && (
@@ -2473,8 +2679,8 @@ export default function LaundryERPApp() {
                 <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
                   <div className="card-body p-0">
                     <div className="table-responsive">
-                      <table className="table table-hover align-middle mb-0 text-nowrap">
-                        <thead className="bg-light border-bottom">
+                      <table className="table table-hover table-custom align-middle mb-0 text-nowrap">
+                        <thead className="bg-light bg-opacity-75 border-bottom">
                           <tr
                             className="text-secondary"
                             style={{
@@ -2511,7 +2717,7 @@ export default function LaundryERPApp() {
                             clothCatalog.map((service: any) => (
                               <tr
                                 key={service.service_id}
-                                className="border-bottom border-light"
+                                className="border-bottom border-light hover-shadow-sm transition-all"
                               >
                                 <td className="ps-4 py-3 fw-bold text-secondary small">
                                   #{service.service_id}
@@ -2519,8 +2725,10 @@ export default function LaundryERPApp() {
                                 <td className="py-3 fw-bold text-dark">
                                   {service.name}
                                 </td>
-                                <td className="py-3 fw-bold text-success bg-success bg-opacity-10 rounded px-2 text-center d-inline-block mt-2">
-                                  ₹{service.price}
+                                <td className="py-3">
+                                  <span className="fw-bold text-success bg-success bg-opacity-10 rounded-pill px-3 py-1 text-center d-inline-block shadow-sm">
+                                    ₹{service.price}
+                                  </span>
                                 </td>
                                 <td className="pe-4 py-3 text-end">
                                   <button
@@ -2551,6 +2759,7 @@ export default function LaundryERPApp() {
               </div>
             )}
 
+          {/* ================= ORDERS SECTION ================= */}
           {activeSection === "orders" && (
             <div className="fade-in">
               {userProfile?.role === "user" ? (
@@ -2561,7 +2770,6 @@ export default function LaundryERPApp() {
                       <i className="bi bi-stars text-warning fs-5"></i>
                     </h4>
                   </div>
-
                   <div className="row g-4">
                     <div className="col-lg-7">
                       <div className="row g-3">
@@ -2839,8 +3047,8 @@ export default function LaundryERPApp() {
                   <div className="card border-0 shadow-sm rounded-4 bg-white">
                     <div className="card-body p-0">
                       <div className="table-responsive">
-                        <table className="table table-hover align-middle mb-0 text-nowrap">
-                          <thead className="bg-light border-bottom">
+                        <table className="table table-hover table-custom align-middle mb-0 text-nowrap">
+                          <thead className="bg-light bg-opacity-75 border-bottom">
                             <tr
                               className="text-secondary"
                               style={{
@@ -2879,7 +3087,7 @@ export default function LaundryERPApp() {
                               filteredOrders.map((order: any) => (
                                 <tr
                                   key={order.order_id}
-                                  className="border-bottom border-light"
+                                  className="border-bottom border-light hover-shadow-sm transition-all"
                                 >
                                   <td className="ps-4 py-3 fw-bold text-dark">
                                     <span
@@ -2914,13 +3122,17 @@ export default function LaundryERPApp() {
                                     >
                                       {order.customer_name}
                                     </span>
+                                    <span className="text-secondary small">
+                                      <i className="bi bi-telephone-fill me-1 opacity-50"></i>
+                                      {order.customer_phone}
+                                    </span>
                                   </td>
                                   <td className="py-3 fw-bold text-dark">
                                     ₹{order.total_amount || 0}
                                   </td>
                                   <td className="py-3">
                                     <span
-                                      className={`badge rounded-pill px-3 py-2 fw-semibold ${getOrderStatusStyle(order.status)}`}
+                                      className={`badge rounded-pill px-3 py-2 fw-semibold shadow-sm ${getOrderStatusStyle(order.status)}`}
                                     >
                                       {order.status}
                                     </span>
@@ -2961,6 +3173,7 @@ export default function LaundryERPApp() {
             </div>
           )}
 
+          {/* ================= PAYROLL SECTION ================= */}
           {activeSection === "payroll" && userProfile?.role === "admin" && (
             <div className="fade-in">
               <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -2972,11 +3185,11 @@ export default function LaundryERPApp() {
                   <i className="bi bi-person-plus-fill"></i> Add Staff
                 </button>
               </div>
-              <div className="card border-0 shadow-sm rounded-4 bg-white">
+              <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
                 <div className="card-body p-0">
                   <div className="table-responsive">
-                    <table className="table table-hover align-middle mb-0 text-nowrap">
-                      <thead className="bg-light border-bottom">
+                    <table className="table table-hover table-custom align-middle mb-0 text-nowrap">
+                      <thead className="bg-light bg-opacity-75 border-bottom">
                         <tr
                           className="text-secondary"
                           style={{
@@ -2999,7 +3212,9 @@ export default function LaundryERPApp() {
                               ></i>
                             </button>
                           </th>
-                          <th className="fw-bold py-3 border-0">STATUS</th>
+                          <th className="fw-bold py-3 border-0">
+                            PAYMENT STATUS
+                          </th>
                           <th className="fw-bold py-3 pe-4 border-0 text-end">
                             ACTIONS
                           </th>
@@ -3020,7 +3235,7 @@ export default function LaundryERPApp() {
                           payrollList.map((staff: any) => (
                             <tr
                               key={staff.staff_id}
-                              className="border-bottom border-light"
+                              className="border-bottom border-light hover-shadow-sm transition-all"
                             >
                               <td className="ps-4 py-3 fw-bold text-dark">
                                 {staff.staff_name}
@@ -3035,7 +3250,7 @@ export default function LaundryERPApp() {
                               </td>
                               <td className="py-3">
                                 <span
-                                  className={`badge rounded-pill px-3 py-2 fw-semibold ${getPayrollStatusStyle(staff.status)}`}
+                                  className={`badge rounded-pill px-3 py-2 fw-semibold shadow-sm ${getPayrollStatusStyle(staff.status)}`}
                                 >
                                   {staff.status}
                                 </span>
@@ -3043,7 +3258,13 @@ export default function LaundryERPApp() {
                               <td className="pe-4 py-3 text-end d-flex align-items-center justify-content-end gap-2">
                                 <select
                                   className="form-select form-select-sm d-inline-block w-auto border rounded-3 bg-white text-secondary shadow-none cursor-pointer"
-                                  defaultValue={staff.status}
+                                  value={staff.status}
+                                  onChange={(e) =>
+                                    handlePayrollStatusUpdate(
+                                      staff.staff_id,
+                                      e.target.value,
+                                    )
+                                  }
                                 >
                                   <option value="Pending">Pending</option>
                                   <option value="Paid">Paid</option>
@@ -3075,6 +3296,7 @@ export default function LaundryERPApp() {
             </div>
           )}
 
+          {/* ================= INVENTORY / STOCKS SECTION ================= */}
           {activeSection === "stocks" &&
             (userProfile?.role === "admin" ||
               userProfile?.role === "manager") && (
@@ -3082,17 +3304,17 @@ export default function LaundryERPApp() {
                 <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
                   <h4 className="fw-bold text-dark mb-0">Inventory Stocks</h4>
                   <button
-                    onClick={() => setIsAddStockModalOpen(true)}
+                    onClick={openAddStockModal}
                     className="btn btn-primary btn-sm px-4 py-2 fw-medium rounded-3 shadow-sm d-flex align-items-center gap-2"
                   >
-                    <i className="bi bi-plus-circle"></i> Add Stock
+                    <i className="bi bi-plus-circle"></i> Add Stock Item
                   </button>
                 </div>
                 <div className="card border-0 shadow-sm rounded-4 bg-white overflow-hidden">
                   <div className="card-body p-0">
                     <div className="table-responsive">
-                      <table className="table table-hover align-middle mb-0 text-nowrap">
-                        <thead className="bg-light border-bottom">
+                      <table className="table table-hover table-custom align-middle mb-0 text-nowrap">
+                        <thead className="bg-light bg-opacity-75 border-bottom">
                           <tr
                             className="text-secondary"
                             style={{
@@ -3104,9 +3326,14 @@ export default function LaundryERPApp() {
                               STOCK ID
                             </th>
                             <th className="fw-bold py-3 border-0">ITEM NAME</th>
-                            <th className="fw-bold py-3 border-0">QUANTITY</th>
                             <th className="fw-bold py-3 border-0">
-                              TOTAL PRICE
+                              QUANTITY (PCS)
+                            </th>
+                            <th className="fw-bold py-3 border-0">
+                              BASE PRICE
+                            </th>
+                            <th className="fw-bold py-3 border-0">
+                              TOTAL VALUE
                             </th>
                             <th className="fw-bold py-3 pe-4 border-0 text-end">
                               ACTIONS
@@ -3117,18 +3344,18 @@ export default function LaundryERPApp() {
                           {stocksList.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={5}
+                                colSpan={6}
                                 className="text-center py-5 text-muted"
                               >
                                 <i className="bi bi-box-seam fs-3 d-block mb-2"></i>{" "}
-                                No stocks found.
+                                No inventory stocks found.
                               </td>
                             </tr>
                           ) : (
                             stocksList.map((stock: any) => (
                               <tr
                                 key={stock.stock_id}
-                                className="border-bottom border-light"
+                                className="border-bottom border-light hover-shadow-sm transition-all"
                               >
                                 <td className="ps-4 py-3 fw-bold text-secondary small">
                                   #{stock.stock_id}
@@ -3136,18 +3363,69 @@ export default function LaundryERPApp() {
                                 <td className="py-3 fw-bold text-dark">
                                   {stock.item_name}
                                 </td>
-                                <td className="py-3 text-primary fw-bold bg-primary bg-opacity-10 rounded px-2 text-center d-inline-block mt-2">
-                                  {stock.quantity} {stock.unit}
+                                <td className="py-3">
+                                  <div className="d-flex align-items-center">
+                                    <button
+                                      onClick={() =>
+                                        handleStockAdjust(stock, -1)
+                                      }
+                                      className="btn btn-sm btn-outline-danger rounded-circle p-0 d-flex justify-content-center align-items-center"
+                                      style={{ width: "28px", height: "28px" }}
+                                    >
+                                      <i className="bi bi-dash"></i>
+                                    </button>
+
+                                    <input
+                                      type="number"
+                                      className="form-control form-control-sm text-center fw-bold border-0 shadow-sm mx-2"
+                                      style={{
+                                        width: "70px",
+                                        backgroundColor: "#e2e8f0",
+                                      }}
+                                      defaultValue={stock.quantity}
+                                      onBlur={(e) =>
+                                        handleStockSet(stock, e.target.value)
+                                      }
+                                      onKeyDown={(e) =>
+                                        e.key === "Enter" &&
+                                        e.currentTarget.blur()
+                                      }
+                                    />
+
+                                    <button
+                                      onClick={() =>
+                                        handleStockAdjust(stock, 1)
+                                      }
+                                      className="btn btn-sm btn-outline-success rounded-circle p-0 d-flex justify-content-center align-items-center"
+                                      style={{ width: "28px", height: "28px" }}
+                                    >
+                                      <i className="bi bi-plus"></i>
+                                    </button>
+                                  </div>
+                                </td>
+                                <td className="py-3 fw-medium text-secondary">
+                                  ₹{stock.price_per_unit || 0} / pcs
                                 </td>
                                 <td className="py-3 fw-bold text-dark">
-                                  ₹{stock.price_per_unit}
+                                  ₹
+                                  {(
+                                    stock.quantity * (stock.price_per_unit || 0)
+                                  ).toFixed(2)}
                                 </td>
                                 <td className="pe-4 py-3 text-end">
+                                  <button
+                                    onClick={() => openEditStockModal(stock)}
+                                    className="btn btn-sm btn-light border text-primary shadow-sm rounded-3 py-1 px-2 me-2"
+                                    title="Edit Stock"
+                                  >
+                                    <i className="bi bi-pencil-square"></i>
+                                  </button>
                                   <button
                                     onClick={() =>
                                       handleDeleteStock(stock.stock_id)
                                     }
                                     className="btn btn-sm btn-white text-danger border shadow-sm rounded-3 py-1 px-2"
+                                    title="Delete Stock"
                                   >
                                     <i className="bi bi-trash3-fill"></i>
                                   </button>
@@ -3163,6 +3441,7 @@ export default function LaundryERPApp() {
               </div>
             )}
 
+          {/* ================= REPORTS SECTION ================= */}
           {activeSection === "reports" && userProfile?.role !== "user" && (
             <div className="fade-in">
               <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
@@ -3304,8 +3583,8 @@ export default function LaundryERPApp() {
                 </div>
                 <div className="card-body p-0">
                   <div className="table-responsive">
-                    <table className="table table-hover align-middle mb-0 text-nowrap">
-                      <thead className="bg-light border-bottom">
+                    <table className="table table-hover table-custom align-middle mb-0 text-nowrap">
+                      <thead className="bg-light bg-opacity-75 border-bottom">
                         <tr
                           className="text-secondary"
                           style={{
@@ -3336,7 +3615,7 @@ export default function LaundryERPApp() {
                           reportsList.map((expense: any) => (
                             <tr
                               key={expense.expense_id}
-                              className="border-bottom border-light"
+                              className="border-bottom border-light hover-shadow-sm transition-all"
                             >
                               <td className="ps-4 py-3 fw-semibold text-dark small">
                                 {new Date(
@@ -3383,15 +3662,18 @@ export default function LaundryERPApp() {
         body { background-color: #F8F9FB; }
         
         .premium-hover:hover { transform: translateY(-5px); box-shadow: 0 15px 30px rgba(13, 110, 253, 0.12) !important; border-color: rgba(13, 110, 253, 0.3) !important; }
+        
+        .hover-shadow-sm:hover { box-shadow: 0 4px 15px rgba(0,0,0,0.05); background-color: #fcfdfd; }
+        .table-custom th { padding-top: 1rem; padding-bottom: 1rem; }
+        .table-custom td { padding-top: 1.25rem; padding-bottom: 1.25rem; }
+
         .add-btn-hover { transition: all 0.2s ease; }
         .premium-hover:hover .add-btn-hover { background-color: #0d6efd !important; color: white !important; transform: scale(1.1); }
-
         .cart-card-premium { border-top: 4px solid #0d6efd !important; }
         .cart-item-anim { animation: slideInRight 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards; }
         @keyframes slideInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
 
         .border-dashed { border-style: dashed !important; border-width: 2px !important; border-color: #dee2e6 !important; }
-
         .payment-card { transition: all 0.2s ease; border: 2px solid transparent; }
         .payment-card.active { border-color: #0d6efd; background-color: rgba(13, 110, 253, 0.05) !important; }
         .payment-card:hover:not(.active) { background-color: #f8f9fa !important; border-color: #dee2e6; }
@@ -3403,6 +3685,10 @@ export default function LaundryERPApp() {
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background: #ced4da; border-radius: 10px; }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #adb5bd; }
+        
+        /* Remove arrows from number input */
+        input[type="number"]::-webkit-inner-spin-button, 
+        input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
       `,
         }}
       />
