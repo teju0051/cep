@@ -8,40 +8,48 @@ export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const handleAuthHash = async () => {
-      const hash = window.location.hash;
+    const handleAuth = async () => {
+      // 1. Check for PKCE authorization code in query params (?code=...)
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get("code");
 
-      // If the URL contains the access token hash from Supabase/Google
-      if (hash && hash.includes("access_token")) {
-        const params = new URLSearchParams(hash.replace("#", "?"));
-        const access_token = params.get("access_token");
-        const refresh_token = params.get("refresh_token");
-
-        if (access_token && refresh_token) {
-          // Explicitly set the session using the tokens parsed from the URL
-          const { error } = await supabase.auth.setSession({
-            access_token,
-            refresh_token,
-          });
-
-          if (!error) {
-            router.replace("/dashboard");
-            return;
-          }
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (!error) {
+          router.replace("/dashboard");
+          return;
         }
       }
 
-      // Fallback: check if session already exists natively
-      const { data: { session } } = await supabase.auth.getSession();
+      // 2. Fallback: Check if session is already active or available via hash
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       if (session) {
         router.replace("/dashboard");
       } else {
-        // If all else fails, bounce back to login
-        router.replace("/login");
+        // Give it one brief moment to catch up if running async state changes
+        const {
+          data: { subscription },
+        } = supabase.auth.onAuthStateChange((event, session) => {
+          if (event === "SIGNED_IN" && session) {
+            router.replace("/dashboard");
+          }
+        });
+
+        // Safety fallback timer
+        const timer = setTimeout(() => {
+          router.replace("/login");
+        }, 3000);
+
+        return () => {
+          subscription.unsubscribe();
+          clearTimeout(timer);
+        };
       }
     };
 
-    handleAuthHash();
+    handleAuth();
   }, [router]);
 
   return (
