@@ -1,34 +1,44 @@
 import { NextResponse } from "next/server";
 import { createClient } from "../../utils/supabase/server";
 
+export const dynamic = "force-dynamic"; // Forces Next.js to always execute dynamically on the server
+
 export async function GET(request: Request) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get("code");
   const next = requestUrl.searchParams.get("next") || "/dashboard";
 
+  if (!code) {
+    console.error("CALLBACK ERROR: No code parameter found");
+    return NextResponse.redirect(
+      new URL("/login?error=no_code", requestUrl.origin),
+      { status: 302 },
+    );
+  }
+
   const supabase = await createClient();
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-  if (code) {
-    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
-
-    if (!error && data.session) {
-      return NextResponse.redirect(new URL(next, requestUrl.origin));
-    }
-
-    // Log error for debugging if needed, but don't fail immediately
-    console.error("Auth callback code exchange note:", error?.message);
+  if (error || !data.session) {
+    console.error("CALLBACK ERROR: Code exchange failed:", error?.message);
+    return NextResponse.redirect(
+      new URL("/login?error=auth_failed", requestUrl.origin),
+      { status: 302 },
+    );
   }
 
-  // Fallback: If the code was already used (e.g. page refresh) or token exists, check active session
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-  if (session) {
-    return NextResponse.redirect(new URL(next, requestUrl.origin));
-  }
-
-  // If all checks fail, redirect back to login with a clean error
-  return NextResponse.redirect(
-    new URL("/login?error=auth_failed", requestUrl.origin),
+  // Create redirect response and apply strict headers to prevent 304 caching
+  const redirectResponse = NextResponse.redirect(
+    new URL(next, requestUrl.origin),
+    {
+      status: 302,
+    },
   );
+
+  redirectResponse.headers.set(
+    "Cache-Control",
+    "no-store, no-cache, must-revalidate, proxy-revalidate",
+  );
+
+  return redirectResponse;
 }
