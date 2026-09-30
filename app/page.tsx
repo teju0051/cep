@@ -47,7 +47,7 @@ export default function LandingPage() {
                 className="fs-3 fw-black text-white tracking-wider"
                 style={{ letterSpacing: "1.5px", textTransform: "uppercase" }}
               >
-                MyDhobhiGhat
+                WashNora Laundry
               </span>
             </Link>
           </div>
@@ -633,7 +633,7 @@ export default function LandingPage() {
                 <i className="bi bi-droplet-half fs-5"></i>
               </div>
               <span className="fs-4 fw-black text-dark tracking-tight text-uppercase">
-                MyDhobhiGhat
+                WashNora Laundry
               </span>
             </div>
             <p className="text-secondary pe-4 fs-6 lh-lg mb-4">
@@ -752,7 +752,7 @@ export default function LandingPage() {
                 <div className="bg-light p-3 rounded-circle text-primary">
                   <i className="bi bi-envelope-fill"></i>
                 </div>
-                <span className="fw-medium">hello@MyDhobhiGhat.com</span>
+                <span className="fw-medium">hello@WashNora Laundry .com</span>
               </li>
               <li className="d-flex gap-3 align-items-center">
                 <div className="bg-light p-3 rounded-circle text-primary">
