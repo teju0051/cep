@@ -2,43 +2,46 @@
 
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { supabase } from "../../lib/supabaseClient"; // Fixed relative import path
+import { supabase } from "../../lib/supabaseClient";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const handleAuthSession = async () => {
-      const {
-        data: { session },
-        error,
-      } = await supabase.auth.getSession();
+    const handleAuthHash = async () => {
+      const hash = window.location.hash;
 
+      // If the URL contains the access token hash from Supabase/Google
+      if (hash && hash.includes("access_token")) {
+        const params = new URLSearchParams(hash.replace("#", "?"));
+        const access_token = params.get("access_token");
+        const refresh_token = params.get("refresh_token");
+
+        if (access_token && refresh_token) {
+          // Explicitly set the session using the tokens parsed from the URL
+          const { error } = await supabase.auth.setSession({
+            access_token,
+            refresh_token,
+          });
+
+          if (!error) {
+            router.replace("/dashboard");
+            return;
+          }
+        }
+      }
+
+      // Fallback: check if session already exists natively
+      const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         router.replace("/dashboard");
       } else {
-        const {
-          data: { subscription },
-        } = supabase.auth.onAuthStateChange((event, session) => {
-          if (event === "SIGNED_IN" && session) {
-            router.replace("/dashboard");
-          }
-        });
-
-        const timer = setTimeout(() => {
-          if (!session) {
-            router.replace("/login");
-          }
-        }, 3000);
-
-        return () => {
-          subscription.unsubscribe();
-          clearTimeout(timer);
-        };
+        // If all else fails, bounce back to login
+        router.replace("/login");
       }
     };
 
-    handleAuthSession();
+    handleAuthHash();
   }, [router]);
 
   return (
