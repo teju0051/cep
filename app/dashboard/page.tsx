@@ -349,7 +349,7 @@ export default function LaundryERPApp() {
     }
   };
 
-  // ================= INVENTORY LOGIC (EDIT, UPDATE, AUTO EXPENSE, ADJUST) =================
+  // ================= INVENTORY LOGIC =================
   const openAddStockModal = () => {
     setEditingStockId(null);
     setNewStock({
@@ -374,99 +374,113 @@ export default function LaundryERPApp() {
     setIsAddStockModalOpen(true);
   };
 
+  // Fixed the stock adjust so +/- works flawlessly and logs expenses ONLY on positive increase
   const handleStockAdjust = async (stock: any, change: number) => {
-    const newQty = parseFloat(stock.quantity) + change;
+    const currentQty = parseFloat(stock.quantity) || 0;
+    const newQty = currentQty + change;
+
     if (newQty < 0) return;
+
+    // Immediately update local state so the input UI reacts instantly
+    setStocksList((prev: any[]) =>
+      prev.map((s) =>
+        s.stock_id === stock.stock_id ? { ...s, quantity: newQty } : s,
+      ),
+    );
 
     const { error } = await supabase
       .from("inventory_stocks")
       .update({ quantity: newQty })
       .eq("stock_id", stock.stock_id);
-    if (!error) {
-      setStocksList((prev: any[]) =>
-        prev.map((s) =>
-          s.stock_id === stock.stock_id ? { ...s, quantity: newQty } : s,
-        ),
-      );
 
-      // Auto-log expense if stock is increasing
+    if (!error) {
+      // Auto-log expense ONLY if increasing
       if (change > 0 && stock.price_per_unit > 0) {
         const cost = change * parseFloat(stock.price_per_unit);
-        const { data: exp } = await supabase
-          .from("business_expenses")
-          .insert([
-            {
-              category: "Detergent/Chemicals",
-              description: `Auto-restock (+${change}): ${stock.item_name}`,
-              amount: cost,
-            },
-          ])
-          .select();
+        if (cost > 0) {
+          const { data: exp } = await supabase
+            .from("business_expenses")
+            .insert([
+              {
+                category: "Detergent/Chemicals",
+                description: `Auto-restock (+${change}): ${stock.item_name}`,
+                amount: cost,
+              },
+            ])
+            .select();
 
-        if (exp) {
-          setReportsList((prev: any[]) => [exp[0], ...prev]);
-          setDashboardStats((prev: any) => ({
-            ...prev,
-            totalExpenses: prev.totalExpenses + cost,
-          }));
-          Swal.fire({
-            icon: "info",
-            title: `₹${cost} Expense Auto-Logged`,
-            toast: true,
-            position: "bottom-end",
-            showConfirmButton: false,
-            timer: 3000,
-          });
+          if (exp) {
+            setReportsList((prev: any[]) => [exp[0], ...prev]);
+            setDashboardStats((prev: any) => ({
+              ...prev,
+              totalExpenses: prev.totalExpenses + cost,
+            }));
+            Swal.fire({
+              icon: "info",
+              title: `₹${cost} Expense Auto-Logged`,
+              toast: true,
+              position: "bottom-end",
+              showConfirmButton: false,
+              timer: 3000,
+            });
+          }
         }
       }
     }
   };
 
+  // Fixed manual input so it logs correctly and ONLY on positive increase
   const handleStockSet = async (stock: any, newQtyStr: string) => {
     const newQty = parseFloat(newQtyStr);
-    if (isNaN(newQty) || newQty < 0) return;
+    const currentQty = parseFloat(stock.quantity) || 0;
 
-    const diff = newQty - parseFloat(stock.quantity);
-    if (diff === 0) return;
+    if (isNaN(newQty) || newQty < 0 || newQty === currentQty) return;
+
+    const diff = newQty - currentQty;
+
+    // Immediately update local state
+    setStocksList((prev: any[]) =>
+      prev.map((s) =>
+        s.stock_id === stock.stock_id ? { ...s, quantity: newQty } : s,
+      ),
+    );
 
     const { error } = await supabase
       .from("inventory_stocks")
       .update({ quantity: newQty })
       .eq("stock_id", stock.stock_id);
-    if (!error) {
-      setStocksList((prev: any[]) =>
-        prev.map((s) =>
-          s.stock_id === stock.stock_id ? { ...s, quantity: newQty } : s,
-        ),
-      );
 
+    if (!error) {
+      // Auto-log expense ONLY if increasing (diff > 0 prevents negative expenses)
       if (diff > 0 && stock.price_per_unit > 0) {
         const cost = diff * parseFloat(stock.price_per_unit);
-        const { data: exp } = await supabase
-          .from("business_expenses")
-          .insert([
-            {
-              category: "Detergent/Chemicals",
-              description: `Manual-restock (+${diff}): ${stock.item_name}`,
-              amount: cost,
-            },
-          ])
-          .select();
+        if (cost > 0) {
+          const { data: exp } = await supabase
+            .from("business_expenses")
+            .insert([
+              {
+                category: "Detergent/Chemicals",
+                description: `Manual-restock (+${diff}): ${stock.item_name}`,
+                amount: cost,
+              },
+            ])
+            .select();
 
-        if (exp) {
-          setReportsList((prev: any[]) => [exp[0], ...prev]);
-          setDashboardStats((prev: any) => ({
-            ...prev,
-            totalExpenses: prev.totalExpenses + cost,
-          }));
-          Swal.fire({
-            icon: "info",
-            title: `₹${cost} Expense Auto-Logged`,
-            toast: true,
-            position: "bottom-end",
-            showConfirmButton: false,
-            timer: 3000,
-          });
+          if (exp) {
+            setReportsList((prev: any[]) => [exp[0], ...prev]);
+            setDashboardStats((prev: any) => ({
+              ...prev,
+              totalExpenses: prev.totalExpenses + cost,
+            }));
+            Swal.fire({
+              icon: "info",
+              title: `₹${cost} Expense Auto-Logged`,
+              toast: true,
+              position: "bottom-end",
+              showConfirmButton: false,
+              timer: 3000,
+            });
+          }
         }
       }
     }
@@ -3332,9 +3346,6 @@ export default function LaundryERPApp() {
                             <th className="fw-bold py-3 border-0">
                               BASE PRICE
                             </th>
-                            <th className="fw-bold py-3 border-0">
-                              TOTAL VALUE
-                            </th>
                             <th className="fw-bold py-3 pe-4 border-0 text-end">
                               ACTIONS
                             </th>
@@ -3344,7 +3355,7 @@ export default function LaundryERPApp() {
                           {stocksList.length === 0 ? (
                             <tr>
                               <td
-                                colSpan={6}
+                                colSpan={5}
                                 className="text-center py-5 text-muted"
                               >
                                 <i className="bi bi-box-seam fs-3 d-block mb-2"></i>{" "}
@@ -3376,7 +3387,9 @@ export default function LaundryERPApp() {
                                     </button>
 
                                     <input
+                                      key={`stock-input-${stock.stock_id}-${stock.quantity}`}
                                       type="number"
+                                      min="0"
                                       className="form-control form-control-sm text-center fw-bold border-0 shadow-sm mx-2"
                                       style={{
                                         width: "70px",
@@ -3405,12 +3418,6 @@ export default function LaundryERPApp() {
                                 </td>
                                 <td className="py-3 fw-medium text-secondary">
                                   ₹{stock.price_per_unit || 0} / pcs
-                                </td>
-                                <td className="py-3 fw-bold text-dark">
-                                  ₹
-                                  {(
-                                    stock.quantity * (stock.price_per_unit || 0)
-                                  ).toFixed(2)}
                                 </td>
                                 <td className="pe-4 py-3 text-end">
                                   <button
