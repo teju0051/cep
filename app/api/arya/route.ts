@@ -71,17 +71,57 @@ const toolsDefinition = [
     type: "function" as const,
     function: {
       name: "add_inventory",
-      description: "Add a new item to inventory stocks.",
+      description:
+        "Extract details to add a new item to inventory stocks based on user voice command. Be highly dynamic with numbers.",
       parameters: {
         type: "object",
         properties: {
-          itemName: { type: "string" },
-          quantity: { type: "number" },
-          unit: { type: "string", enum: ["kg", "Ltr", "ml", "pcs"] },
-          price: { type: "number" },
-          reply: { type: "string" },
+          name: {
+            type: "string",
+            description:
+              "The name of the item to add to stock (e.g., Surf Excel, Bleach).",
+          },
+          quantity: {
+            type: "number",
+            description: "The exact numerical quantity stated.",
+          },
+          pricePerUnit: {
+            type: "number",
+            description: "The base price per individual unit stated.",
+          },
+          reply: {
+            type: "string",
+            description: "A confirmation message to speak back to the user.",
+          },
         },
-        required: ["itemName", "quantity", "unit", "price", "reply"],
+        required: ["name", "quantity", "pricePerUnit", "reply"],
+      },
+    },
+  },
+  {
+    type: "function" as const,
+    function: {
+      name: "add_service",
+      description:
+        "Extract details to add a new laundry service to the catalog based on user voice command.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description:
+              "The name of the new laundry service (e.g., Dry Clean Jacket, Wash & Fold).",
+          },
+          price: {
+            type: "number",
+            description: "The price for the new service stated.",
+          },
+          reply: {
+            type: "string",
+            description: "A confirmation message to speak back to the user.",
+          },
+        },
+        required: ["name", "price", "reply"],
       },
     },
   },
@@ -116,6 +156,7 @@ const toolsDefinition = [
 function formatToolResponse(name: string, args: any) {
   if (name === "answer_question")
     return NextResponse.json({ action: "SPEAK", message: args.reply });
+
   if (name === "update_order")
     return NextResponse.json({
       action: "UPDATE_ORDER",
@@ -123,24 +164,42 @@ function formatToolResponse(name: string, args: any) {
       newStatus: args.status,
       message: args.reply,
     });
+
   if (name === "navigate")
     return NextResponse.json({
       action: "NAVIGATE",
       section: args.section,
       message: args.reply,
     });
+
   if (name === "add_inventory")
     return NextResponse.json({
-      action: "ADD_INVENTORY",
-      item: args,
+      action: "ADD_STOCK", // Maps to the new frontend handler
+      payload: {
+        name: args.name,
+        quantity: args.quantity,
+        pricePerUnit: args.pricePerUnit,
+      },
       message: args.reply,
     });
+
+  if (name === "add_service")
+    return NextResponse.json({
+      action: "ADD_SERVICE", // Maps to the new frontend handler
+      payload: {
+        name: args.name,
+        price: args.price,
+      },
+      message: args.reply,
+    });
+
   if (name === "add_expense")
     return NextResponse.json({
       action: "ADD_EXPENSE",
       expense: args,
       message: args.reply,
     });
+
   return NextResponse.json({ action: "SPEAK", message: "Command processed." });
 }
 
@@ -154,6 +213,8 @@ Admin Command: "${command}"
 Live Inventory: ${JSON.stringify(inventoryContext || [])}
 Live Orders: ${JSON.stringify(ordersContext || [])}
 Live Expenses: ${JSON.stringify(reportsContext || [])}
+
+Instructions: You are Arya, an administrative ERP assistant. If the user tells you to "add stock", "add inventory", or similar, use the add_inventory tool and extract the numerical quantity and price dynamically from their speech. If they tell you to "add a service", use the add_service tool and extract the price dynamically.
 `;
 
     // ========================================================
@@ -176,7 +237,7 @@ Live Expenses: ${JSON.stringify(reportsContext || [])}
           model: "gemini-2.5-flash",
           tools: geminiTools,
           systemInstruction:
-            "You are Arya, an administrative ERP assistant. Execute actions using tools.",
+            "You are Arya, an administrative ERP assistant. Execute actions using tools. Always prioritize executing the requested action over conversational chatter.",
         });
 
         const result = await model.startChat().sendMessage(fullPrompt);
@@ -214,7 +275,7 @@ Live Expenses: ${JSON.stringify(reportsContext || [])}
             {
               role: "system",
               content:
-                "You are Arya, an administrative ERP assistant. Execute actions using tools.",
+                "You are Arya, an administrative ERP assistant. Execute actions using tools. Always prioritize executing the requested action over conversational chatter.",
             },
             { role: "user", content: fullPrompt },
           ],
@@ -246,12 +307,12 @@ Live Expenses: ${JSON.stringify(reportsContext || [])}
         });
 
         const completion = await nvidia.chat.completions.create({
-          model: "meta/llama-3.1-70b-instruct", // Updated active NIM endpoint
+          model: "meta/llama-3.1-70b-instruct",
           messages: [
             {
               role: "system",
               content:
-                "You are Arya, an administrative ERP assistant. Execute actions using tools.",
+                "You are Arya, an administrative ERP assistant. Execute actions using tools. Always prioritize executing the requested action over conversational chatter.",
             },
             { role: "user", content: fullPrompt },
           ],

@@ -374,14 +374,12 @@ export default function LaundryERPApp() {
     setIsAddStockModalOpen(true);
   };
 
-  // Fixed the stock adjust so +/- works flawlessly and logs expenses ONLY on positive increase
   const handleStockAdjust = async (stock: any, change: number) => {
     const currentQty = parseFloat(stock.quantity) || 0;
     const newQty = currentQty + change;
 
     if (newQty < 0) return;
 
-    // Immediately update local state so the input UI reacts instantly
     setStocksList((prev: any[]) =>
       prev.map((s) =>
         s.stock_id === stock.stock_id ? { ...s, quantity: newQty } : s,
@@ -394,7 +392,6 @@ export default function LaundryERPApp() {
       .eq("stock_id", stock.stock_id);
 
     if (!error) {
-      // Auto-log expense ONLY if increasing
       if (change > 0 && stock.price_per_unit > 0) {
         const cost = change * parseFloat(stock.price_per_unit);
         if (cost > 0) {
@@ -429,7 +426,6 @@ export default function LaundryERPApp() {
     }
   };
 
-  // Fixed manual input so it logs correctly and ONLY on positive increase
   const handleStockSet = async (stock: any, newQtyStr: string) => {
     const newQty = parseFloat(newQtyStr);
     const currentQty = parseFloat(stock.quantity) || 0;
@@ -438,7 +434,6 @@ export default function LaundryERPApp() {
 
     const diff = newQty - currentQty;
 
-    // Immediately update local state
     setStocksList((prev: any[]) =>
       prev.map((s) =>
         s.stock_id === stock.stock_id ? { ...s, quantity: newQty } : s,
@@ -451,7 +446,6 @@ export default function LaundryERPApp() {
       .eq("stock_id", stock.stock_id);
 
     if (!error) {
-      // Auto-log expense ONLY if increasing (diff > 0 prevents negative expenses)
       if (diff > 0 && stock.price_per_unit > 0) {
         const cost = diff * parseFloat(stock.price_per_unit);
         if (cost > 0) {
@@ -609,6 +603,105 @@ export default function LaundryERPApp() {
           timer: 1000,
         });
       }
+    }
+  };
+
+  // ================= ARYA AI ADD STOCK & SERVICE =================
+  const handleVoiceAddStock = async (
+    name: string,
+    quantity: number,
+    pricePerUnit: number,
+  ) => {
+    if (!name || isNaN(quantity) || isNaN(pricePerUnit)) {
+      Swal.fire(
+        "Incomplete Data",
+        "Arya needs the item name, quantity, and price per unit.",
+        "warning",
+      );
+      return;
+    }
+    const { data, error } = await supabase
+      .from("inventory_stocks")
+      .insert([
+        {
+          item_name: name,
+          quantity: parseFloat(quantity as any),
+          unit: "pcs",
+          price_per_unit: parseFloat(pricePerUnit as any),
+        },
+      ])
+      .select();
+
+    if (!error && data) {
+      setStocksList((prev: any[]) => [data[0], ...prev]);
+      const cost =
+        parseFloat(quantity as any) * parseFloat(pricePerUnit as any);
+      if (cost > 0) {
+        const { data: exp } = await supabase
+          .from("business_expenses")
+          .insert([
+            {
+              category: "Detergent/Chemicals",
+              description: `Voice Initial Stock: ${quantity} pcs of ${name}`,
+              amount: cost,
+            },
+          ])
+          .select();
+        if (exp) {
+          setReportsList((prev: any[]) => [exp[0], ...prev]);
+          setDashboardStats((prev: any) => ({
+            ...prev,
+            totalExpenses: prev.totalExpenses + cost,
+          }));
+        }
+      }
+      Swal.fire({
+        icon: "success",
+        title: "Stock Added by Arya!",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+      });
+    } else {
+      Swal.fire(
+        "Error",
+        error?.message || "Failed to add stock via voice",
+        "error",
+      );
+    }
+  };
+
+  const handleVoiceAddService = async (name: string, price: number) => {
+    if (!name || isNaN(price)) {
+      Swal.fire(
+        "Incomplete Data",
+        "Arya needs the service name and price.",
+        "warning",
+      );
+      return;
+    }
+    const { data, error } = await supabase
+      .from("laundry_services")
+      .insert([{ name: name, price: parseFloat(price as any) }])
+      .select();
+
+    if (!error && data) {
+      setClothCatalog((prev: any[]) => [...prev, data[0]]);
+      Swal.fire({
+        icon: "success",
+        title: "Service Added by Arya!",
+        toast: true,
+        position: "top-end",
+        showConfirmButton: false,
+        timer: 3000,
+      });
+    } else {
+      Swal.fire(
+        "Error",
+        error?.message || "Failed to add service via voice",
+        "error",
+      );
     }
   };
 
@@ -837,10 +930,27 @@ export default function LaundryERPApp() {
           setAryaState("dormant");
         });
 
+        // ARYA ACTION HANDLERS
         if (data.action === "UPDATE_ORDER") {
           handleOrderStatusUpdate(Number(data.orderId), data.newStatus);
         } else if (data.action === "NAVIGATE") {
           setActiveSection(data.section);
+        } else if (data.action === "ADD_STOCK") {
+          const name = data.payload?.name || data.stockName || data.name;
+          const qty = data.payload?.quantity || data.quantity || data.qty;
+          const price =
+            data.payload?.pricePerUnit || data.pricePerUnit || data.price;
+          handleVoiceAddStock(name, qty, price);
+        } else if (data.action === "ADD_SERVICE") {
+          const name = data.payload?.name || data.serviceName || data.name;
+          const price = data.payload?.price || data.price;
+          handleVoiceAddService(name, price);
+        } else if (data.action === "OPEN_ADD_STOCK") {
+          setActiveSection("stocks");
+          openAddStockModal();
+        } else if (data.action === "OPEN_ADD_SERVICE") {
+          setActiveSection("services");
+          openAddServiceModal();
         }
       } catch (error) {
         setAryaState("dormant");
