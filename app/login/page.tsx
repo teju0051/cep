@@ -3,10 +3,22 @@ import React, { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import { supabase } from "../lib/supabaseClient";
 import { FcGoogle } from "react-icons/fc";
+import {
+  FaShieldAlt,
+  FaQrcode,
+  FaWhatsapp,
+  FaPhoneAlt,
+  FaBolt,
+  FaExclamationTriangle,
+  FaArrowRight,
+} from "react-icons/fa";
 
 const ZENTECH_SUPPORT_PHONE = "917738342274"; // +91 7738342274
 const ZENTECH_DISPLAY_PHONE = "+91 7738342274";
 const RAZORPAY_KEY_ID = "rzp_live_TTaH03kARMoEdZ";
+
+// Strictly whitelisted Super Admin emails (in addition to profile.role === 'superadmin')
+const SUPERADMIN_EMAILS = ["tejasshinde021@gmail.com"];
 
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -35,7 +47,7 @@ export default function LoginPage() {
     });
   };
 
-  // Helper: Verify if an Admin/Manager's store is Suspended or Expired
+  // Helper: Verify User Role & Redirect Super Admin Straight to /sys-telemetry
   const verifyStoreSubscription = async (
     userId: string,
     userEmail?: string,
@@ -46,17 +58,24 @@ export default function LoginPage() {
       .eq("id", userId)
       .maybeSingle();
 
-    // Super Admin goes straight to stealth control center
+    const cleanEmail = (userEmail || "").toLowerCase().trim();
+
+    // 1. SUPER ADMIN CHECK -> Always redirect to /sys-telemetry (NEVER /dashboard)
     const isSuperAdmin =
       profile?.role === "superadmin" ||
-      userEmail?.toLowerCase().includes("zentech") ||
-      userEmail?.toLowerCase() === "tejasshinde021@gmail.com";
+      SUPERADMIN_EMAILS.includes(cleanEmail) ||
+      cleanEmail.includes("zentech");
 
     if (isSuperAdmin) {
-      return { allowed: true, redirectUrl: "/sys-telemetry", shop: null };
+      return {
+        allowed: true,
+        isSuperAdmin: true,
+        redirectUrl: "/sys-telemetry",
+        shop: null,
+      };
     }
 
-    // Store Admin / Manager subscription check
+    // 2. STORE ADMIN / MANAGER SUBSCRIPTION CHECK
     if (profile?.role === "admin" || profile?.role === "manager") {
       const assignedShopId = profile.shop_id || "SHOP-A";
 
@@ -76,6 +95,7 @@ export default function LoginPage() {
           "Your subscription has been ended. Please renew to continue the service.";
         return {
           allowed: false,
+          isSuperAdmin: false,
           message: msg,
           redirectUrl: "/login",
           shop: shopData || {
@@ -89,7 +109,13 @@ export default function LoginPage() {
       }
     }
 
-    return { allowed: true, redirectUrl: "/dashboard", shop: null };
+    // 3. ACTIVE STORE ADMIN OR REGULAR CUSTOMER -> Redirect to /dashboard
+    return {
+      allowed: true,
+      isSuperAdmin: false,
+      redirectUrl: "/dashboard",
+      shop: null,
+    };
   };
 
   useEffect(() => {
@@ -107,7 +133,6 @@ export default function LoginPage() {
 
         setSuspendedMsg(customMsg);
 
-        // Fetch shop details so renewal modal has exact store name & amount
         supabase
           .from("shops")
           .select("*")
@@ -127,7 +152,7 @@ export default function LoginPage() {
       }
     }
 
-    // 2. Check existing session (e.g. after Google OAuth or page refresh)
+    // 2. Check existing session or Google OAuth return
     const checkSession = async () => {
       const {
         data: { session },
@@ -147,7 +172,8 @@ export default function LoginPage() {
           return;
         }
 
-        window.location.href = check.redirectUrl;
+        // Redirects to /sys-telemetry for Super Admin, or /dashboard for others
+        window.location.replace(check.redirectUrl);
       }
     };
     checkSession();
@@ -213,7 +239,7 @@ export default function LoginPage() {
 
         await Swal.fire({
           icon: "success",
-          title: "Subscription Renewed & Activated!",
+          title: "Subscription Renewed & Activated",
           html: `Payment ID: <strong>${response.razorpay_payment_id}</strong><br/>Your store <strong>${targetShop.shop_name}</strong> is now Active for the next 30 days. Please sign in below.`,
           confirmButtonColor: "#198754",
         });
@@ -239,17 +265,7 @@ export default function LoginPage() {
     const shopName = suspendedShop?.shop_name || "WashNora Store";
     const amount = suspendedShop?.last_invoice_amount || 4999;
 
-    const message = `*ZEN-TECH ERP — SUBSCRIPTION RENEWAL REQUEST* 🛡️
------------------------------------------
-Hello Zen-Tech Support Team,
-I would like to renew my Laundry ERP software subscription.
-
-*Store ID:* ${shopId}
-*Store Name:* ${shopName}
-*Admin Email:* ${email || suspendedShop?.owner_email || "N/A"}
-*Renewal Amount:* ₹${amount}
------------------------------------------
-Please share the payment confirmation or activate my store subscription. Thank you!`;
+    const message = `*ZEN-TECH ERP — SUBSCRIPTION RENEWAL REQUEST*\n-----------------------------------------\nHello Zen-Tech Support Team,\nI would like to renew my Laundry ERP software subscription.\n\n*Store ID:* ${shopId}\n*Store Name:* ${shopName}\n*Admin Email:* ${email || suspendedShop?.owner_email || "N/A"}\n*Renewal Amount:* ₹${amount}\n-----------------------------------------\nPlease share the payment confirmation or activate my store subscription. Thank you!`;
 
     const waUrl = `https://wa.me/${ZENTECH_SUPPORT_PHONE}?text=${encodeURIComponent(
       message,
@@ -267,7 +283,7 @@ Please share the payment confirmation or activate my store subscription. Thank y
         password,
       });
 
-      // 1. Handle wrong email/password FIRST so data.user is never null
+      // 1. Handle wrong email/password FIRST
       if (error || !data?.user) {
         Swal.fire({
           icon: "error",
@@ -279,7 +295,7 @@ Please share the payment confirmation or activate my store subscription. Thank y
         return;
       }
 
-      // 2. Check if Store Admin's subscription is active or suspended
+      // 2. Check role & subscription status
       const subCheck = await verifyStoreSubscription(
         data.user.id,
         data.user.email,
@@ -294,17 +310,22 @@ Please share the payment confirmation or activate my store subscription. Thank y
         return;
       }
 
-      // 3. Login allowed -> Redirect to /dashboard (or /sys-telemetry for Super Admin)
+      // 3. Login allowed -> Route Super Admin to /sys-telemetry, others to /dashboard
       if (data?.session) {
         Swal.fire({
           icon: "success",
-          title: "Welcome back.",
+          title: subCheck.isSuperAdmin
+            ? "Welcome, Super Admin"
+            : "Welcome back.",
+          text: subCheck.isSuperAdmin
+            ? "Redirecting to Zen-Tech Telemetry Control Center..."
+            : undefined,
           showConfirmButton: false,
-          timer: 1000,
+          timer: 900,
         });
         setTimeout(() => {
-          window.location.href = subCheck.redirectUrl;
-        }, 1000);
+          window.location.replace(subCheck.redirectUrl);
+        }, 900);
       }
     } else {
       const { error } = await supabase.auth.signUp({
@@ -338,7 +359,8 @@ Please share the payment confirmation or activate my store subscription. Thank y
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        // Returning to /login ensures verifyStoreSubscription runs and routes Super Admin to /sys-telemetry
+        redirectTo: `${window.location.origin}/login`,
       },
     });
 
@@ -353,7 +375,7 @@ Please share the payment confirmation or activate my store subscription. Thank y
     }
   };
 
-  // Dynamic QR Code URL for scanning payment / WhatsApp contact
+  // Dynamic UPI QR Code URL for scanning payment
   const renewalAmount = suspendedShop?.last_invoice_amount || 4999;
   const upiQrData = `upi://pay?pa=7738342274@upi&pn=Zen-Tech%20International&am=${renewalAmount}&cu=INR&tn=ERP%20Renewal%20${
     suspendedShop?.shop_id || "SHOP-A"
@@ -369,9 +391,8 @@ Please share the payment confirmation or activate my store subscription. Thank y
         <div
           className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center fade-in-anim"
           style={{
-            backgroundColor: "rgba(10, 17, 40, 0.78)",
+            backgroundColor: "rgba(10, 17, 40, 0.82)",
             zIndex: 9999,
-            backdropFilter: "blur(6px)",
           }}
         >
           <div
@@ -391,9 +412,9 @@ Please share the payment confirmation or activate my store subscription. Thank y
             <div className="text-center mb-3">
               <div
                 className="rounded-circle bg-danger bg-opacity-10 text-danger d-flex justify-content-center align-items-center mx-auto mb-2 border border-danger border-opacity-25"
-                style={{ width: "54px", height: "54px", fontSize: "1.5rem" }}
+                style={{ width: "54px", height: "54px" }}
               >
-                <i className="bi bi-shield-lock-fill"></i>
+                <FaShieldAlt size={24} />
               </div>
               <span className="badge bg-danger text-white rounded-pill px-3 py-1 mb-1">
                 SUBSCRIPTION ENDED / STORE SUSPENDED
@@ -430,9 +451,9 @@ Please share the payment confirmation or activate my store subscription. Thank y
 
             {/* QR Code Scanner Box */}
             <div className="text-center p-3 rounded-3 border bg-white mb-3 shadow-sm">
-              <div className="fw-bold text-dark small mb-1">
-                <i className="bi bi-qr-code-scan text-primary me-1"></i> Scan QR
-                Code with Any UPI App to Pay
+              <div className="fw-bold text-dark small mb-1 d-flex justify-content-center align-items-center gap-2">
+                <FaQrcode className="text-primary" />
+                <span>Scan QR Code with Any UPI App to Pay</span>
               </div>
               <small className="text-secondary d-block mb-2">
                 GPay • PhonePe • Paytm • BHIM (Zen-Tech International)
@@ -458,7 +479,7 @@ Please share the payment confirmation or activate my store subscription. Thank y
                 disabled={isPayingRenewal}
                 className="btn btn-primary w-100 fw-bold py-2 rounded-3 shadow-sm d-flex justify-content-center align-items-center gap-2"
               >
-                <i className="bi bi-lightning-charge-fill text-warning"></i>
+                <FaBolt className="text-warning" />
                 <span>
                   {isPayingRenewal
                     ? "Opening Razorpay..."
@@ -471,7 +492,7 @@ Please share the payment confirmation or activate my store subscription. Thank y
                 onClick={handleWhatsAppManualRenewal}
                 className="btn btn-success w-100 fw-bold py-2 rounded-3 shadow-sm d-flex justify-content-center align-items-center gap-2"
               >
-                <i className="bi bi-whatsapp fs-6"></i>
+                <FaWhatsapp size={18} />
                 <span>
                   Renew Manually on WhatsApp ({ZENTECH_DISPLAY_PHONE})
                 </span>
@@ -479,10 +500,10 @@ Please share the payment confirmation or activate my store subscription. Thank y
 
               <a
                 href={`tel:${ZENTECH_DISPLAY_PHONE.replace(/\s+/g, "")}`}
-                className="btn btn-outline-dark btn-sm w-100 fw-semibold py-2 rounded-3 mt-1"
+                className="btn btn-outline-dark btn-sm w-100 fw-semibold py-2 rounded-3 mt-1 d-flex justify-content-center align-items-center gap-2"
               >
-                <i className="bi bi-telephone-outbound-fill me-2 text-primary"></i>
-                Call Zen-Tech Support: {ZENTECH_DISPLAY_PHONE}
+                <FaPhoneAlt className="text-primary" size={13} />
+                <span>Call Zen-Tech Support: {ZENTECH_DISPLAY_PHONE}</span>
               </a>
             </div>
           </div>
@@ -515,25 +536,25 @@ Please share the payment confirmation or activate my store subscription. Thank y
             {suspendedMsg && (
               <div className="alert alert-danger border-0 shadow-sm rounded-3 p-3 mt-3 mb-0">
                 <div className="d-flex align-items-start gap-2 mb-2">
-                  <i className="bi bi-exclamation-triangle-fill text-danger mt-1"></i>
+                  <FaExclamationTriangle className="text-danger mt-1 flex-shrink-0" />
                   <span className="small fw-semibold">{suspendedMsg}</span>
                 </div>
                 <div className="d-flex flex-wrap gap-2 mt-2">
                   <button
                     type="button"
                     onClick={() => setIsRenewalModalOpen(true)}
-                    className="btn btn-danger btn-sm rounded-pill px-3 fw-bold"
+                    className="btn btn-danger btn-sm rounded-pill px-3 fw-bold d-flex align-items-center gap-1"
                   >
-                    <i className="bi bi-qr-code-scan me-1"></i> Renew Now (QR /
-                    Razorpay)
+                    <FaQrcode />
+                    <span>Renew Now (QR / Razorpay)</span>
                   </button>
                   <button
                     type="button"
                     onClick={handleWhatsAppManualRenewal}
-                    className="btn btn-success btn-sm rounded-pill px-3 fw-bold"
+                    className="btn btn-success btn-sm rounded-pill px-3 fw-bold d-flex align-items-center gap-1"
                   >
-                    <i className="bi bi-whatsapp me-1"></i>{" "}
-                    {ZENTECH_DISPLAY_PHONE}
+                    <FaWhatsapp />
+                    <span>{ZENTECH_DISPLAY_PHONE}</span>
                   </button>
                 </div>
               </div>
@@ -634,15 +655,10 @@ Please share the payment confirmation or activate my store subscription. Thank y
                 {loading
                   ? "Processing..."
                   : isLogin
-                    ? "Access Dashboard"
+                    ? "Access Workspace"
                     : "Create Account"}
               </span>
-              {!loading && (
-                <i
-                  className="bi bi-arrow-right"
-                  style={{ fontSize: "16px" }}
-                ></i>
-              )}
+              {!loading && <FaArrowRight size={14} />}
             </button>
           </form>
 
@@ -665,10 +681,11 @@ Please share the payment confirmation or activate my store subscription. Thank y
             <button
               type="button"
               onClick={() => setIsRenewalModalOpen(true)}
-              className="bg-transparent border-0 p-0 text-danger fw-bold hover-opacity"
+              className="bg-transparent border-0 p-0 text-danger fw-bold hover-opacity d-flex align-items-center gap-1"
               style={{ fontSize: "0.76rem" }}
             >
-              <i className="bi bi-qr-code me-1"></i>Store Renewal / Support
+              <FaQrcode />
+              <span>Store Renewal / Support</span>
             </button>
           </div>
         </div>

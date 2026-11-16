@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import Swal from "sweetalert2";
+import Link from "next/link";
 import {
   FaCheck,
   FaTimes,
@@ -20,13 +21,6 @@ import {
   FaTruck,
   FaMicrophoneAlt,
   FaCalculator,
-  FaPrint,
-  FaMobileAlt,
-  FaCheckCircle,
-  FaArrowRight,
-  FaClock,
-  FaHeadset,
-  FaLock,
   FaBolt,
 } from "react-icons/fa";
 
@@ -162,438 +156,198 @@ export default function PricingPage() {
 
   return (
     <div
-      className="min-vh-100 pb-5"
-      style={{ backgroundColor: "#F8FAFC", color: "#0F172A" }}
+      className="min-vh-100 bg-white"
+      style={{
+        color: "#0F172A",
+        fontFamily: "'Inter', system-ui, -apple-system, sans-serif",
+        overflowX: "hidden",
+      }}
     >
-      {/* ================= TOP TRIAL ANNOUNCEMENT BAR ================= */}
+      {/* ================= TOP ANNOUNCEMENT BAR ================= */}
       <div
-        className="py-2 px-3 text-center text-white small"
-        style={{ backgroundColor: "#0284C7", fontWeight: 600 }}
+        className="py-2 px-3 text-white"
+        style={{
+          backgroundColor: "#0F172A",
+          borderBottom: "2px solid #0284C7",
+          fontSize: "0.8rem",
+        }}
       >
-        <div className="container d-flex justify-content-center align-items-center flex-wrap gap-2">
-          <span className="badge bg-warning text-dark rounded-1 px-2 py-1 fw-bold">
-            7 DAYS FREE TRIAL
-          </span>
-          <span>
-            No Credit Card Required — Send a WhatsApp Message or Call Us
-            Directly at{" "}
+        <div className="container d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <div className="d-flex align-items-center gap-2 fw-bold">
+            <span
+              className="px-2 py-0 text-dark fw-bolder text-uppercase"
+              style={{
+                backgroundColor: "#38BDF8",
+                borderRadius: "2px",
+                fontSize: "0.7rem",
+              }}
+            >
+              7-DAY FREE TRIAL
+            </span>
+            <span>NO CREDIT CARD REQUIRED — SETUP IN 30 MINUTES</span>
+          </div>
+          <div className="fw-bold">
+            <span className="text-warning me-2">WHATSAPP / CALL:</span>
             <a
               href={`tel:${ZENTECH_DISPLAY_PHONE.replace(/\s+/g, "")}`}
-              className="text-white text-decoration-underline fw-bold"
+              className="text-info text-decoration-none fw-bolder"
             >
               {ZENTECH_DISPLAY_PHONE}
             </a>
-          </span>
+          </div>
         </div>
       </div>
 
       {/* ================= STICKY CORPORATE NAVBAR ================= */}
       <nav
-        className="bg-white border-bottom sticky-top py-3 px-3 px-md-4"
-        style={{ zIndex: 1030, boxShadow: "0 2px 12px rgba(15, 23, 42, 0.04)" }}
+        className="bg-white py-3 sticky-top"
+        style={{
+          borderBottom: "2px solid #0F172A",
+          zIndex: 1030,
+        }}
       >
         <div className="container d-flex justify-content-between align-items-center flex-wrap gap-2">
-          <div className="d-flex align-items-center gap-3">
-            <div
-              className="d-flex justify-content-center align-items-center text-white rounded-2 shadow-sm"
-              style={{
-                width: "42px",
-                height: "42px",
-                backgroundColor: "#0B132B",
-              }}
-            >
-              <FaStore size={20} className="text-info" />
-            </div>
-            <div>
-              <div className="d-flex align-items-center gap-2">
-                <span
-                  className="fw-bolder fs-5"
-                  style={{ color: "#0B132B", letterSpacing: "-0.3px" }}
-                >
-                  Wash<span style={{ color: "#0284C7" }}>Nora</span> ERP
-                </span>
-                <span
-                  className="badge rounded-1 text-uppercase"
-                  style={{
-                    backgroundColor: "#E0F2FE",
-                    color: "#0369A1",
-                    fontSize: "0.65rem",
-                    fontWeight: 700,
-                  }}
-                >
-                  By Zen-Tech
-                </span>
-              </div>
-              <small
-                className="text-secondary d-block"
-                style={{ fontSize: "0.72rem" }}
+          <Link
+            href="/"
+            className="d-flex align-items-center gap-3 text-decoration-none"
+          >
+            <img
+              src="/logo.png"
+              alt="WashNora ERP"
+              style={{ height: "40px", objectFit: "contain" }}
+            />
+            <div className="border-start border-2 border-dark ps-3">
+              <span
+                className="fw-bolder fs-5 text-dark d-block"
+                style={{ letterSpacing: "-0.4px", lineHeight: 0.95 }}
               >
-                Cloud Billing, Stock &amp; Multi-Branch Laundry Software
-              </small>
+                WASH<span style={{ color: "#0284C7" }}>NORA</span>
+              </span>
+              <span
+                className="fw-bolder text-uppercase d-block mt-1"
+                style={{
+                  fontSize: "0.62rem",
+                  color: "#0284C7",
+                  letterSpacing: "1.2px",
+                }}
+              >
+                CLOUD LAUNDRY ERP • BY ZEN-TECH
+              </span>
             </div>
-          </div>
+          </Link>
 
           <div className="d-flex align-items-center gap-2">
-            <a
+            <Link
               href="/login"
-              className="btn btn-outline-dark btn-sm rounded-2 px-3 py-2 fw-bold d-flex align-items-center gap-2"
+              className="btn fw-bolder text-dark px-3 py-2 d-flex align-items-center gap-2 neo-btn-white"
+              style={{ fontSize: "0.82rem" }}
             >
-              <FaSignInAlt />
-              <span>Store Login</span>
-            </a>
+              <FaSignInAlt style={{ color: "#0284C7" }} />
+              <span>STORE LOGIN</span>
+            </Link>
             <button
-              onClick={() => handleWhatsAppTrial("7-Day Free Trial")}
-              className="btn btn-success btn-sm rounded-2 px-3 py-2 fw-bold d-flex align-items-center gap-2 shadow-sm"
+              onClick={() => handleWhatsAppTrial("Navbar 7-Day Free Trial")}
+              className="btn fw-bolder text-white px-3 py-2 d-flex align-items-center gap-2 neo-btn-green"
+              style={{ fontSize: "0.82rem" }}
             >
               <FaWhatsapp size={16} />
-              <span>Start 7-Day Free Trial</span>
+              <span>7-DAY FREE TRIAL</span>
             </button>
           </div>
         </div>
       </nav>
 
-      {/* ================= EXECUTIVE SPLIT HERO SECTION ================= */}
+      {/* ================= PRICING HEADER & BILLING TOGGLE ================= */}
       <section
-        className="py-5 border-bottom"
-        style={{ backgroundColor: "#0B132B", color: "#FFFFFF" }}
+        className="py-5 text-center border-bottom"
+        style={{
+          backgroundColor: "#F0F7FF",
+          backgroundImage:
+            "linear-gradient(to right, rgba(2, 132, 199, 0.05) 1px, transparent 1px), linear-gradient(to bottom, rgba(2, 132, 199, 0.05) 1px, transparent 1px)",
+          backgroundSize: "32px 32px",
+          borderColor: "#0F172A",
+        }}
       >
         <div className="container py-2">
-          <div className="row g-5 align-items-center">
-            {/* Left Column: Pitch & Direct Trial CTA */}
-            <div className="col-lg-7 text-start">
-              <div
-                className="d-inline-flex align-items-center gap-2 rounded-1 px-3 py-1 mb-3 small fw-bold"
-                style={{
-                  backgroundColor: "#1E293B",
-                  color: "#38BDF8",
-                  border: "1px solid #334155",
-                }}
-              >
-                <FaShieldAlt />
-                <span>
-                  BUILT FOR LAUNDRY, DRY-CLEANING &amp; STEAM PRESS STORES
-                </span>
-              </div>
-
-              <h1
-                className="fw-bolder display-5 mb-3 text-white"
-                style={{ letterSpacing: "-0.5px", lineHeight: 1.18 }}
-              >
-                Run Your Entire Laundry Business From One Smart Screen.
-              </h1>
-
-              <p
-                className="mb-4"
-                style={{
-                  color: "#94A3B8",
-                  fontSize: "1.05rem",
-                  lineHeight: 1.6,
-                }}
-              >
-                Stop losing money to paper notebooks, forgotten unpaid bills,
-                and missing detergent stock. Send instant WhatsApp bills, track
-                customer pickups, and manage 1 to 10+ shop branches from your
-                phone or computer.
-              </p>
-
-              {/* Highlighted Free Trial Action Box */}
-              <div
-                className="p-4 rounded-3 mb-4"
-                style={{
-                  backgroundColor: "#16203D",
-                  border: "1px solid #2DD4BF",
-                }}
-              >
-                <div className="d-flex align-items-center gap-2 text-warning fw-bold small text-uppercase mb-1">
-                  <FaBolt />
-                  <span>7 Days Free Trial — No Credit Card Required</span>
-                </div>
-                <p className="small text-white mb-3">
-                  Want to test the software in your shop first? Send a WhatsApp
-                  message or call{" "}
-                  <strong className="text-info">{ZENTECH_DISPLAY_PHONE}</strong>{" "}
-                  and get your store live in 30 minutes.
-                </p>
-                <div className="d-flex flex-wrap gap-2">
-                  <button
-                    onClick={() => handleWhatsAppTrial("7-Day Free Trial")}
-                    className="btn btn-success rounded-2 px-4 py-2 fw-bold d-flex align-items-center gap-2 shadow"
-                  >
-                    <FaWhatsapp size={18} />
-                    <span>WhatsApp Trial: {ZENTECH_DISPLAY_PHONE}</span>
-                  </button>
-                  <a
-                    href={`tel:${ZENTECH_DISPLAY_PHONE.replace(/\s+/g, "")}`}
-                    className="btn btn-outline-light rounded-2 px-4 py-2 fw-bold d-flex align-items-center gap-2"
-                  >
-                    <FaPhoneAlt size={14} />
-                    <span>Call Direct: {ZENTECH_DISPLAY_PHONE}</span>
-                  </a>
-                </div>
-              </div>
-
-              <div
-                className="d-flex flex-wrap gap-4 small"
-                style={{ color: "#CBD5E1" }}
-              >
-                <div className="d-flex align-items-center gap-2">
-                  <FaCheckCircle className="text-info" />
-                  <span>Free Rate Card Setup</span>
-                </div>
-                <div className="d-flex align-items-center gap-2">
-                  <FaCheckCircle className="text-info" />
-                  <span>₹0 Per WhatsApp Invoice</span>
-                </div>
-                <div className="d-flex align-items-center gap-2">
-                  <FaCheckCircle className="text-info" />
-                  <span>100% Private Store Data</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Right Column: Visual ERP Live Counter Mockup Card */}
-            <div className="col-lg-5">
-              <div
-                className="rounded-3 p-4 shadow-lg bg-white text-dark"
-                style={{ border: "4px solid #1E293B" }}
-              >
-                <div className="d-flex justify-content-between align-items-center border-bottom pb-3 mb-3">
-                  <div className="d-flex align-items-center gap-2">
-                    <div
-                      className="rounded-2 d-flex justify-content-center align-items-center text-white"
-                      style={{
-                        width: "32px",
-                        height: "32px",
-                        backgroundColor: "#0284C7",
-                      }}
-                    >
-                      <FaStore size={15} />
-                    </div>
-                    <div>
-                      <div className="fw-bold small text-dark">
-                        WashNora — Main Branch
-                      </div>
-                      <small
-                        className="text-secondary"
-                        style={{ fontSize: "0.7rem" }}
-                      >
-                        Live Counter POS &amp; Branch Monitor
-                      </small>
-                    </div>
-                  </div>
-                  <span className="badge bg-success bg-opacity-10 text-success border border-success border-opacity-25 rounded-1 px-2 py-1">
-                    STORE ACTIVE
-                  </span>
-                </div>
-
-                {/* Mockup KPI Row */}
-                <div className="row g-2 mb-3">
-                  <div className="col-6">
-                    <div className="p-2 px-3 rounded-2 bg-light border">
-                      <small
-                        className="text-secondary fw-bold d-block"
-                        style={{ fontSize: "0.68rem" }}
-                      >
-                        TODAY&apos;S PAID REVENUE
-                      </small>
-                      <span className="fw-bolder fs-5 text-dark">₹8,450</span>
-                      <span
-                        className="badge bg-success text-white ms-2"
-                        style={{ fontSize: "0.62rem" }}
-                      >
-                        32 Orders
-                      </span>
-                    </div>
-                  </div>
-                  <div className="col-6">
-                    <div className="p-2 px-3 rounded-2 bg-light border">
-                      <small
-                        className="text-secondary fw-bold d-block"
-                        style={{ fontSize: "0.68rem" }}
-                      >
-                        PENDING UNPAID DUES
-                      </small>
-                      <span className="fw-bolder fs-5 text-danger">₹1,240</span>
-                      <span
-                        className="badge bg-danger bg-opacity-10 text-danger ms-2"
-                        style={{ fontSize: "0.62rem" }}
-                      >
-                        4 Bills
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Mockup Order Item */}
-                <div
-                  className="p-3 rounded-2 border mb-3"
-                  style={{ backgroundColor: "#F8FAFC" }}
-                >
-                  <div className="d-flex justify-content-between align-items-center mb-1">
-                    <span className="fw-bold small text-primary">
-                      #INV-1048 • Customer Order
-                    </span>
-                    <span
-                      className="badge bg-success text-white rounded-1"
-                      style={{ fontSize: "0.65rem" }}
-                    >
-                      FULLY PAID
-                    </span>
-                  </div>
-                  <div className="small text-secondary mb-2">
-                    3x Formal Shirt (Steam Press), 2x Suit Dry Clean, 1x Curtain
-                  </div>
-                  <div className="d-flex justify-content-between align-items-center pt-2 border-top small">
-                    <span className="fw-bold text-dark">Grand Total: ₹680</span>
-                    <span className="text-success fw-bold d-flex align-items-center gap-1">
-                      <FaWhatsapp /> Sent on WhatsApp
-                    </span>
-                  </div>
-                </div>
-
-                {/* Mockup Bottom Status */}
-                <div className="d-flex justify-content-between align-items-center small text-secondary pt-1">
-                  <span className="d-flex align-items-center gap-1">
-                    <FaBoxes className="text-primary" /> Surf Excel Stock:{" "}
-                    <strong>24 Pcs</strong>
-                  </span>
-                  <span className="d-flex align-items-center gap-1">
-                    <FaMicrophoneAlt className="text-success" /> Arya AI:{" "}
-                    <strong>Active</strong>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================= 3-STEP ONBOARDING STRIP ================= */}
-      <section className="bg-white border-bottom py-4">
-        <div className="container">
-          <div className="row g-3 text-center">
-            <div className="col-md-4">
-              <div className="d-flex align-items-center justify-content-center gap-3 p-2">
-                <div
-                  className="rounded-circle d-flex justify-content-center align-items-center fw-bold text-white flex-shrink-0"
-                  style={{
-                    width: "36px",
-                    height: "36px",
-                    backgroundColor: "#0284C7",
-                  }}
-                >
-                  1
-                </div>
-                <div className="text-start">
-                  <div className="fw-bold text-dark small">
-                    Message Us on WhatsApp
-                  </div>
-                  <small className="text-secondary">
-                    Send your shop name &amp; rate card to{" "}
-                    {ZENTECH_DISPLAY_PHONE}
-                  </small>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-4">
-              <div className="d-flex align-items-center justify-content-center gap-3 p-2">
-                <div
-                  className="rounded-circle d-flex justify-content-center align-items-center fw-bold text-white flex-shrink-0"
-                  style={{
-                    width: "36px",
-                    height: "36px",
-                    backgroundColor: "#0284C7",
-                  }}
-                >
-                  2
-                </div>
-                <div className="text-start">
-                  <div className="fw-bold text-dark small">
-                    Use 7 Days 100% Free
-                  </div>
-                  <small className="text-secondary">
-                    Test counter billing, WhatsApp bills &amp; stock tracking
-                  </small>
-                </div>
-              </div>
-            </div>
-            <div className="col-md-4">
-              <div className="d-flex align-items-center justify-content-center gap-3 p-2">
-                <div
-                  className="rounded-circle d-flex justify-content-center align-items-center fw-bold text-white flex-shrink-0"
-                  style={{
-                    width: "36px",
-                    height: "36px",
-                    backgroundColor: "#059669",
-                  }}
-                >
-                  3
-                </div>
-                <div className="text-start">
-                  <div className="fw-bold text-dark small">
-                    Subscribe Only When Happy
-                  </div>
-                  <small className="text-secondary">
-                    Pay monthly or yearly via UPI QR or Razorpay
-                  </small>
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* ================= PRICING HEADER & BILLING TOGGLE ================= */}
-      <section className="container pt-5 pb-3 text-center">
-        <h2 className="fw-bolder text-dark mb-2">
-          Simple, Honest Pricing for Every Laundry Size
-        </h2>
-        <p
-          className="text-secondary mx-auto mb-4"
-          style={{ maxWidth: "620px" }}
-        >
-          Choose the plan that fits your shop. Every plan starts with a{" "}
-          <strong className="text-dark">
-            7-Day Free Trial (No Credit Card Required)
-          </strong>
-          .
-        </p>
-
-        <div className="d-inline-flex align-items-center bg-white p-1 rounded-2 border shadow-sm">
-          <button
-            onClick={() => setBillingCycle("monthly")}
-            className={`btn btn-sm rounded-1 px-4 py-2 fw-bold border-0 ${
-              billingCycle === "monthly"
-                ? "bg-dark text-white"
-                : "text-secondary"
-            }`}
+          <div
+            className="d-inline-flex align-items-center gap-2 px-3 py-1 mb-3 fw-bolder text-uppercase bg-white"
+            style={{
+              border: "2px solid #0F172A",
+              boxShadow: "4px 4px 0px #0284C7",
+              fontSize: "0.72rem",
+              letterSpacing: "0.8px",
+            }}
           >
-            Monthly Billing
-          </button>
-          <button
-            onClick={() => setBillingCycle("annual")}
-            className={`btn btn-sm rounded-1 px-4 py-2 fw-bold border-0 ${
-              billingCycle === "annual"
-                ? "bg-dark text-white"
-                : "text-secondary"
-            }`}
+            <FaShieldAlt style={{ color: "#0284C7" }} />
+            <span>TRANSPARENT B2B SAAS PRICING • NO HIDDEN FEES</span>
+          </div>
+
+          <h1
+            className="fw-bolder display-6 text-dark mb-2"
+            style={{ letterSpacing: "-0.5px" }}
           >
-            Yearly Billing{" "}
-            <span className="badge bg-warning text-dark ms-1">Save 35%</span>
-          </button>
+            Software Investment That Pays For Itself in 3 Days
+          </h1>
+          <p
+            className="text-secondary mx-auto mb-4 fw-medium"
+            style={{ maxWidth: "620px" }}
+          >
+            Every subscription includes unlimited daily orders, free WhatsApp
+            billing, customer booking portal, and a{" "}
+            <strong className="text-dark">
+              7-Day Free Trial (No Credit Card Required)
+            </strong>
+            .
+          </p>
+
+          <div
+            className="d-inline-flex align-items-center bg-white p-1"
+            style={{
+              border: "2px solid #0F172A",
+              boxShadow: "4px 4px 0px #0F172A",
+            }}
+          >
+            <button
+              onClick={() => setBillingCycle("monthly")}
+              className={`btn btn-sm rounded-0 px-4 py-2 fw-bolder border-0 ${
+                billingCycle === "monthly"
+                  ? "bg-dark text-white"
+                  : "text-secondary bg-white"
+              }`}
+            >
+              MONTHLY BILLING
+            </button>
+            <button
+              onClick={() => setBillingCycle("annual")}
+              className={`btn btn-sm rounded-0 px-4 py-2 fw-bolder border-0 ${
+                billingCycle === "annual"
+                  ? "bg-dark text-white"
+                  : "text-secondary bg-white"
+              }`}
+            >
+              YEARLY BILLING{" "}
+              <span className="badge bg-warning text-dark ms-1 rounded-0 fw-bold">
+                SAVE 35%
+              </span>
+            </button>
+          </div>
         </div>
       </section>
 
       {/* ================= 3 EXECUTIVE PRICING CARDS ================= */}
-      <section className="container py-4">
+      <section className="container py-5">
         <div className="row g-4 align-items-stretch">
           {/* TIER 1: BASIC BILLING */}
           <div className="col-lg-4">
-            <div className="card border rounded-3 h-100 p-4 bg-white shadow-sm d-flex flex-column">
+            <div className="p-4 bg-white h-100 neo-card d-flex flex-column">
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <span
-                  className="badge rounded-1 px-2 py-1 fw-bold"
-                  style={{ backgroundColor: "#F1F5F9", color: "#475569" }}
+                  className="badge rounded-0 px-2 py-1 fw-bolder text-uppercase"
+                  style={{
+                    backgroundColor: "#F1F5F9",
+                    color: "#475569",
+                    border: "1px solid #CBD5E1",
+                  }}
                 >
                   SINGLE LAUNDRY SHOP
                 </span>
@@ -603,25 +357,20 @@ export default function PricingPage() {
               <h4 className="fw-bolder text-dark mb-1">
                 1. Basic Billing Plan
               </h4>
-              <p className="text-secondary small mb-3">
+              <p className="text-secondary small mb-3 fw-medium">
                 For a single neighborhood laundry or steam press shop moving
                 from paper bill books to computer/mobile billing.
               </p>
 
               <div
-                className="p-3 rounded-2 mb-3"
-                style={{
-                  backgroundColor: "#F8FAFC",
-                  border: "1px solid #E2E8F0",
-                }}
+                className="p-3 mb-3 bg-white"
+                style={{ border: "2px solid #0F172A" }}
               >
                 <div className="d-flex align-items-baseline gap-1">
                   <h2 className="fw-bolder display-6 text-dark mb-0">
                     {billingCycle === "annual" ? "₹1,499" : "₹1,999"}
                   </h2>
-                  <span className="text-secondary small fw-semibold">
-                    / month
-                  </span>
+                  <span className="text-secondary small fw-bold">/ month</span>
                 </div>
                 <small className="text-success fw-bold d-block mt-1">
                   {billingCycle === "annual"
@@ -630,12 +379,15 @@ export default function PricingPage() {
                 </small>
               </div>
 
-              <div className="p-3 rounded-2 bg-light border-start border-4 border-secondary mb-3">
-                <div className="fw-bold text-dark small mb-1">
+              <div
+                className="p-3 rounded-0 bg-light border-start border-4 border-secondary mb-3"
+                style={{ border: "1px solid #E2E8F0" }}
+              >
+                <div className="fw-bolder text-dark small mb-1">
                   Problem Solved in This Price:
                 </div>
                 <p
-                  className="text-secondary small mb-0"
+                  className="text-secondary small mb-0 fw-medium"
                   style={{ lineHeight: 1.5 }}
                 >
                   Stops lost paper slips and calculation mistakes. Send official
@@ -644,10 +396,10 @@ export default function PricingPage() {
                 </p>
               </div>
 
-              <h6 className="fw-bold text-dark small text-uppercase mb-3">
+              <h6 className="fw-bolder text-dark small text-uppercase mb-3">
                 What Is Included:
               </h6>
-              <ul className="list-unstyled d-flex flex-column gap-2 mb-4 small flex-grow-1">
+              <ul className="list-unstyled d-flex flex-column gap-2 mb-4 small fw-medium flex-grow-1">
                 <li className="d-flex align-items-start gap-2">
                   <FaCheck className="text-success mt-1 flex-shrink-0" />
                   <span>
@@ -704,7 +456,7 @@ export default function PricingPage() {
                   onClick={() =>
                     handleWhatsAppTrial("Basic Billing Plan (₹1,999)")
                   }
-                  className="btn btn-success w-100 fw-bold rounded-2 py-2 d-flex justify-content-center align-items-center gap-2"
+                  className="btn fw-bolder text-white py-2 d-flex justify-content-center align-items-center gap-2 neo-btn-green"
                 >
                   <FaWhatsapp size={16} />
                   <span>Start 7-Day Free Trial</span>
@@ -717,7 +469,8 @@ export default function PricingPage() {
                     )
                   }
                   disabled={loadingTier === "Basic Billing Plan"}
-                  className="btn btn-outline-dark btn-sm w-100 fw-bold rounded-2 py-2"
+                  className="btn fw-bolder text-dark py-2 neo-btn-white"
+                  style={{ fontSize: "0.85rem" }}
                 >
                   {loadingTier === "Basic Billing Plan"
                     ? "Opening Razorpay..."
@@ -730,14 +483,15 @@ export default function PricingPage() {
           {/* TIER 2: SMART SHOP + STOCK (DARK NAVY EXECUTIVE CARD) */}
           <div className="col-lg-4">
             <div
-              className="card border-0 rounded-3 h-100 p-4 shadow-lg d-flex flex-column position-relative text-white"
+              className="p-4 h-100 d-flex flex-column position-relative text-white"
               style={{
                 backgroundColor: "#0B132B",
-                border: "2px solid #0284C7",
+                border: "2px solid #0F172A",
+                boxShadow: "8px 8px 0px #0284C7",
               }}
             >
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <span className="badge bg-warning text-dark rounded-1 px-2 py-1 fw-bold">
+                <span className="badge bg-warning text-dark rounded-0 px-2 py-1 fw-bold">
                   MOST POPULAR — BEST ROI
                 </span>
                 <FaChartLine className="text-info" size={20} />
@@ -746,30 +500,22 @@ export default function PricingPage() {
               <h4 className="fw-bolder text-white mb-1">
                 2. Smart Shop + Stock Plan
               </h4>
-              <p className="small mb-3" style={{ color: "#94A3B8" }}>
+              <p className="small mb-3 fw-medium" style={{ color: "#94A3B8" }}>
                 Complete automation for busy laundries that want to stop
                 detergent waste, track expenses, and earn express delivery fees.
               </p>
 
               <div
-                className="p-3 rounded-2 mb-3"
-                style={{
-                  backgroundColor: "#16203D",
-                  border: "1px solid #334155",
-                }}
+                className="p-3 mb-3 bg-white text-dark"
+                style={{ border: "2px solid #0284C7" }}
               >
                 <div className="d-flex align-items-baseline gap-1">
-                  <h2 className="fw-bolder display-6 text-info mb-0">
+                  <h2 className="fw-bolder display-6 text-primary mb-0">
                     {billingCycle === "annual" ? "₹1,999" : "₹2,999"}
                   </h2>
-                  <span
-                    className="small fw-semibold"
-                    style={{ color: "#CBD5E1" }}
-                  >
-                    / month
-                  </span>
+                  <span className="small fw-bold text-secondary">/ month</span>
                 </div>
-                <small className="text-warning fw-bold d-block mt-1">
+                <small className="text-success fw-bold d-block mt-1">
                   {billingCycle === "annual"
                     ? "Billed ₹23,988 yearly (You save ₹12,000!)"
                     : "Recovers its entire monthly fee in 3 days"}
@@ -777,14 +523,14 @@ export default function PricingPage() {
               </div>
 
               <div
-                className="p-3 rounded-2 mb-3 border-start border-4 border-info"
+                className="p-3 rounded-0 mb-3 border-start border-4 border-info"
                 style={{ backgroundColor: "#16203D" }}
               >
                 <div className="fw-bold text-info small mb-1">
                   Problem Solved in This Price:
                 </div>
                 <p
-                  className="small mb-0 text-white"
+                  className="small mb-0 text-white fw-medium"
                   style={{ lineHeight: 1.5 }}
                 >
                   Stops staff from wasting detergent, calculates exact Net
@@ -796,7 +542,7 @@ export default function PricingPage() {
               <h6 className="fw-bold text-info small text-uppercase mb-3">
                 Everything in Basic, Plus:
               </h6>
-              <ul className="list-unstyled d-flex flex-column gap-2 mb-4 small flex-grow-1">
+              <ul className="list-unstyled d-flex flex-column gap-2 mb-4 small fw-medium flex-grow-1">
                 <li className="d-flex align-items-start gap-2">
                   <FaCheck className="text-info mt-1 flex-shrink-0" />
                   <span>
@@ -854,7 +600,7 @@ export default function PricingPage() {
                   onClick={() =>
                     handleWhatsAppTrial("Smart Shop + Stock Plan (₹2,999)")
                   }
-                  className="btn btn-success w-100 fw-bold rounded-2 py-2 d-flex justify-content-center align-items-center gap-2 shadow"
+                  className="btn fw-bolder text-white py-2 d-flex justify-content-center align-items-center gap-2 neo-btn-green"
                 >
                   <FaWhatsapp size={16} />
                   <span>Start 7-Day Free Trial</span>
@@ -867,7 +613,13 @@ export default function PricingPage() {
                     )
                   }
                   disabled={loadingTier === "Smart Shop + Stock Plan"}
-                  className="btn btn-info btn-sm w-100 fw-bold text-dark rounded-2 py-2"
+                  className="btn fw-bolder text-dark py-2"
+                  style={{
+                    backgroundColor: "#38BDF8",
+                    border: "2px solid #0F172A",
+                    borderRadius: "0px",
+                    fontSize: "0.85rem",
+                  }}
                 >
                   {loadingTier === "Smart Shop + Stock Plan"
                     ? "Opening Razorpay..."
@@ -879,11 +631,15 @@ export default function PricingPage() {
 
           {/* TIER 3: MULTI-BRANCH ENTERPRISE */}
           <div className="col-lg-4">
-            <div className="card border rounded-3 h-100 p-4 bg-white shadow-sm d-flex flex-column">
+            <div className="p-4 bg-white h-100 neo-card d-flex flex-column">
               <div className="d-flex justify-content-between align-items-center mb-2">
                 <span
-                  className="badge rounded-1 px-2 py-1 fw-bold"
-                  style={{ backgroundColor: "#ECFDF5", color: "#047857" }}
+                  className="badge rounded-0 px-2 py-1 fw-bolder text-uppercase"
+                  style={{
+                    backgroundColor: "#ECFDF5",
+                    color: "#047857",
+                    border: "1px solid #059669",
+                  }}
                 >
                   FOR 2 TO 10+ BRANCHES
                 </span>
@@ -893,23 +649,20 @@ export default function PricingPage() {
               <h4 className="fw-bolder text-dark mb-1">
                 3. Multi-Branch Owner Plan
               </h4>
-              <p className="text-secondary small mb-3">
+              <p className="text-secondary small mb-3 fw-medium">
                 For chain owners running multiple laundry branches or franchises
                 who want to monitor all shops from one login.
               </p>
 
               <div
-                className="p-3 rounded-2 mb-3"
-                style={{
-                  backgroundColor: "#F8FAFC",
-                  border: "1px solid #E2E8F0",
-                }}
+                className="p-3 mb-3 bg-white"
+                style={{ border: "2px solid #0F172A" }}
               >
                 <div className="d-flex align-items-baseline gap-1">
                   <h2 className="fw-bolder display-6 text-dark mb-0">
                     {billingCycle === "annual" ? "₹3,749" : "₹4,999"}
                   </h2>
-                  <span className="text-secondary small fw-semibold">
+                  <span className="text-secondary small fw-bold">
                     / month (3 Shops)
                   </span>
                 </div>
@@ -920,12 +673,15 @@ export default function PricingPage() {
                 </small>
               </div>
 
-              <div className="p-3 rounded-2 bg-light border-start border-4 border-success mb-3">
-                <div className="fw-bold text-dark small mb-1">
+              <div
+                className="p-3 rounded-0 bg-light border-start border-4 border-success mb-3"
+                style={{ border: "1px solid #E2E8F0" }}
+              >
+                <div className="fw-bolder text-dark small mb-1">
                   Problem Solved in This Price:
                 </div>
                 <p
-                  className="text-secondary small mb-0"
+                  className="text-secondary small mb-0 fw-medium"
                   style={{ lineHeight: 1.5 }}
                 >
                   Watch all your shops without leaving home. Switch between Shop
@@ -934,10 +690,10 @@ export default function PricingPage() {
                 </p>
               </div>
 
-              <h6 className="fw-bold text-dark small text-uppercase mb-3">
+              <h6 className="fw-bolder text-dark small text-uppercase mb-3">
                 Everything in Smart Plan, Plus:
               </h6>
-              <ul className="list-unstyled d-flex flex-column gap-2 mb-4 small flex-grow-1">
+              <ul className="list-unstyled d-flex flex-column gap-2 mb-4 small fw-medium flex-grow-1">
                 <li className="d-flex align-items-start gap-2">
                   <FaCheck className="text-success mt-1 flex-shrink-0" />
                   <span>
@@ -988,7 +744,7 @@ export default function PricingPage() {
                   onClick={() =>
                     handleWhatsAppTrial("Multi-Branch Owner Plan (₹4,999)")
                   }
-                  className="btn btn-success w-100 fw-bold rounded-2 py-2 d-flex justify-content-center align-items-center gap-2"
+                  className="btn fw-bolder text-white py-2 d-flex justify-content-center align-items-center gap-2 neo-btn-green"
                 >
                   <FaWhatsapp size={16} />
                   <span>Start 7-Day Free Trial</span>
@@ -1001,7 +757,8 @@ export default function PricingPage() {
                     )
                   }
                   disabled={loadingTier === "Multi-Branch Owner Plan"}
-                  className="btn btn-outline-dark btn-sm w-100 fw-bold rounded-2 py-2"
+                  className="btn fw-bolder text-dark py-2 neo-btn-white"
+                  style={{ fontSize: "0.85rem" }}
                 >
                   {loadingTier === "Multi-Branch Owner Plan"
                     ? "Opening Razorpay..."
@@ -1015,7 +772,13 @@ export default function PricingPage() {
 
       {/* ================= INTERACTIVE PROFIT & SAVINGS CALCULATOR ================= */}
       <section className="container py-5">
-        <div className="card border rounded-3 bg-white p-4 p-md-5 shadow-sm">
+        <div
+          className="card rounded-0 bg-white p-4 p-md-5"
+          style={{
+            border: "2px solid #0F172A",
+            boxShadow: "8px 8px 0px #0F172A",
+          }}
+        >
           <div className="row g-4 align-items-center">
             <div className="col-lg-6">
               <div className="d-inline-flex align-items-center gap-2 text-primary fw-bold small mb-2">
@@ -1025,15 +788,15 @@ export default function PricingPage() {
               <h3 className="fw-bolder text-dark mb-2">
                 See How Much Extra Money Your Shop Will Make Every Month
               </h3>
-              <p className="text-secondary small mb-4">
+              <p className="text-secondary small mb-4 fw-medium">
                 Move the two sliders below according to your laundry shop&apos;s
                 daily orders:
               </p>
 
               <div className="mb-4">
-                <div className="d-flex justify-content-between fw-bold small mb-2">
+                <div className="d-flex justify-content-between fw-bolder small mb-2 text-dark">
                   <span>Daily Orders in Your Shop:</span>
-                  <span className="badge bg-primary text-white px-3 py-1">
+                  <span className="badge bg-primary text-white px-3 py-1 rounded-0">
                     {dailyOrders} Orders / Day
                   </span>
                 </div>
@@ -1049,9 +812,9 @@ export default function PricingPage() {
               </div>
 
               <div className="mb-2">
-                <div className="d-flex justify-content-between fw-bold small mb-2">
+                <div className="d-flex justify-content-between fw-bolder small mb-2 text-dark">
                   <span>Average Bill Amount per Order (₹):</span>
-                  <span className="badge bg-primary text-white px-3 py-1">
+                  <span className="badge bg-primary text-white px-3 py-1 rounded-0">
                     ₹{avgOrderValue} / Order
                   </span>
                 </div>
@@ -1069,15 +832,21 @@ export default function PricingPage() {
 
             <div className="col-lg-6">
               <div
-                className="p-4 rounded-3 text-white"
-                style={{ backgroundColor: "#0B132B" }}
+                className="p-4 rounded-0 text-white"
+                style={{
+                  backgroundColor: "#0B132B",
+                  border: "2px solid #0F172A",
+                }}
               >
                 <h6 className="text-info fw-bold text-uppercase mb-3">
                   Your Estimated Monthly Financial Gain
                 </h6>
 
                 <div className="d-flex justify-content-between align-items-center border-bottom border-secondary pb-2 mb-2">
-                  <span className="small" style={{ color: "#CBD5E1" }}>
+                  <span
+                    className="small fw-medium"
+                    style={{ color: "#CBD5E1" }}
+                  >
                     1. Unpaid / Forgotten Bills Recovered (8%):
                   </span>
                   <strong className="text-white">
@@ -1086,7 +855,10 @@ export default function PricingPage() {
                 </div>
 
                 <div className="d-flex justify-content-between align-items-center border-bottom border-secondary pb-2 mb-2">
-                  <span className="small" style={{ color: "#CBD5E1" }}>
+                  <span
+                    className="small fw-medium"
+                    style={{ color: "#CBD5E1" }}
+                  >
                     2. Customer Booking App &amp; Fast Delivery (+15%):
                   </span>
                   <strong className="text-white">
@@ -1095,7 +867,10 @@ export default function PricingPage() {
                 </div>
 
                 <div className="d-flex justify-content-between align-items-center border-bottom border-secondary pb-2 mb-3">
-                  <span className="small" style={{ color: "#CBD5E1" }}>
+                  <span
+                    className="small fw-medium"
+                    style={{ color: "#CBD5E1" }}
+                  >
                     3. Saved Detergent &amp; Liquid Stock Waste:
                   </span>
                   <strong className="text-white">
@@ -1104,10 +879,13 @@ export default function PricingPage() {
                 </div>
 
                 <div
-                  className="d-flex justify-content-between align-items-center p-3 rounded-2"
+                  className="p-3 rounded-0"
                   style={{
                     backgroundColor: "#16203D",
                     border: "1px solid #0284C7",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
                   }}
                 >
                   <div>
@@ -1134,13 +912,16 @@ export default function PricingPage() {
           <h3 className="fw-bolder text-dark mb-1">
             Complete Feature Comparison
           </h3>
-          <p className="text-secondary small">
+          <p className="text-secondary small fw-medium">
             Every tool built to make your laundry shop faster, cleaner, and more
             profitable
           </p>
         </div>
 
-        <div className="card border rounded-3 overflow-hidden bg-white shadow-sm">
+        <div
+          className="card rounded-0 overflow-hidden bg-white shadow-sm"
+          style={{ border: "2px solid #0F172A" }}
+        >
           <div className="table-responsive">
             <table className="table table-hover align-middle mb-0">
               <thead style={{ backgroundColor: "#0B132B", color: "#FFFFFF" }}>
@@ -1158,7 +939,7 @@ export default function PricingPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="small">
+              <tbody className="small fw-medium">
                 <tr>
                   <td className="ps-4 fw-bold">
                     Number of Laundry Branches Included
@@ -1322,19 +1103,26 @@ export default function PricingPage() {
       </section>
 
       {/* ================= CLIENT FEEDBACK & RESULTS ================= */}
-      <section className="py-5 bg-white border-top border-bottom mt-4">
+      <section
+        className="py-5 bg-white border-top border-bottom mt-4"
+        style={{ borderColor: "#0F172A" }}
+      >
         <div className="container">
           <div className="text-center mb-5">
             <span
-              className="badge rounded-1 px-3 py-1 fw-bold mb-2"
-              style={{ backgroundColor: "#ECFDF5", color: "#047857" }}
+              className="badge rounded-0 px-3 py-1 fw-bold mb-2"
+              style={{
+                backgroundColor: "#ECFDF5",
+                color: "#047857",
+                border: "1px solid #059669",
+              }}
             >
               PROVEN IN REAL LAUNDRY STORES
             </span>
             <h3 className="fw-bolder text-dark mb-1">
               What Laundry Owners Say After Switching to WashNora ERP
             </h3>
-            <p className="text-secondary small">
+            <p className="text-secondary small fw-medium">
               Real feedback from store owners across Mumbai, Navi Mumbai, and
               Thane
             </p>
@@ -1343,8 +1131,11 @@ export default function PricingPage() {
           <div className="row g-4">
             <div className="col-md-4">
               <div
-                className="card border rounded-3 p-4 h-100"
-                style={{ backgroundColor: "#F8FAFC" }}
+                className="p-4 h-100 neo-card bg-white"
+                style={{
+                  border: "2px solid #0F172A",
+                  boxShadow: "6px 6px 0px #0F172A",
+                }}
               >
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <div className="d-flex gap-1 text-warning">
@@ -1354,12 +1145,12 @@ export default function PricingPage() {
                     <FaStar />
                     <FaStar />
                   </div>
-                  <span className="badge bg-success text-white rounded-1">
+                  <span className="badge bg-success text-white rounded-0">
                     +32% Sales Increase
                   </span>
                 </div>
                 <p
-                  className="text-dark small mb-3"
+                  className="text-dark small mb-3 fw-medium"
                   style={{ lineHeight: 1.65 }}
                 >
                   &ldquo;I run 3 branches in Andheri West, Kamothe, and Thane
@@ -1368,9 +1159,9 @@ export default function PricingPage() {
                   phone. Customers get instant WhatsApp bills, and we recovered
                   all our pending unpaid bills.&rdquo;
                 </p>
-                <div className="mt-auto pt-3 border-top">
+                <div className="mt-auto pt-3 border-top border-dark">
                   <h6 className="fw-bold text-dark mb-0">Avinash Hirwale</h6>
-                  <small className="text-secondary">
+                  <small className="text-secondary fw-semibold">
                     Owner of 3 Branches (Andheri West, Kamothe &amp; Thane)
                   </small>
                 </div>
@@ -1379,8 +1170,11 @@ export default function PricingPage() {
 
             <div className="col-md-4">
               <div
-                className="card border rounded-3 p-4 h-100"
-                style={{ backgroundColor: "#F8FAFC" }}
+                className="p-4 h-100 neo-card bg-white"
+                style={{
+                  border: "2px solid #0F172A",
+                  boxShadow: "6px 6px 0px #0F172A",
+                }}
               >
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <div className="d-flex gap-1 text-warning">
@@ -1390,12 +1184,12 @@ export default function PricingPage() {
                     <FaStar />
                     <FaStar />
                   </div>
-                  <span className="badge bg-primary text-white rounded-1">
+                  <span className="badge bg-primary text-white rounded-0">
                     Saved ₹6,500/mo in Stock
                   </span>
                 </div>
                 <p
-                  className="text-dark small mb-3"
+                  className="text-dark small mb-3 fw-medium"
                   style={{ lineHeight: 1.65 }}
                 >
                   &ldquo;My biggest worry was detergent and liquid stock
@@ -1404,9 +1198,9 @@ export default function PricingPage() {
                   is 100% private to my login—nobody else can see my store or my
                   customers.&rdquo;
                 </p>
-                <div className="mt-auto pt-3 border-top">
+                <div className="mt-auto pt-3 border-top border-dark">
                   <h6 className="fw-bold text-dark mb-0">Manohar</h6>
-                  <small className="text-secondary">
+                  <small className="text-secondary fw-semibold">
                     Laundry Store Owner • Maharashtra
                   </small>
                 </div>
@@ -1415,8 +1209,11 @@ export default function PricingPage() {
 
             <div className="col-md-4">
               <div
-                className="card border rounded-3 p-4 h-100"
-                style={{ backgroundColor: "#F8FAFC" }}
+                className="p-4 h-100 neo-card bg-white"
+                style={{
+                  border: "2px solid #0F172A",
+                  boxShadow: "6px 6px 0px #0F172A",
+                }}
               >
                 <div className="d-flex justify-content-between align-items-center mb-3">
                   <div className="d-flex gap-1 text-warning">
@@ -1426,12 +1223,12 @@ export default function PricingPage() {
                     <FaStar />
                     <FaStar />
                   </div>
-                  <span className="badge bg-dark text-white rounded-1">
+                  <span className="badge bg-dark text-white rounded-0">
                     +₹9,000 Express Delivery
                   </span>
                 </div>
                 <p
-                  className="text-dark small mb-3"
+                  className="text-dark small mb-3 fw-medium"
                   style={{ lineHeight: 1.65 }}
                 >
                   &ldquo;Customers book orders from their mobile phone and pick
@@ -1440,11 +1237,11 @@ export default function PricingPage() {
                   our monthly software fee, and our delivery boy never visits a
                   locked flat.&rdquo;
                 </p>
-                <div className="mt-auto pt-3 border-top">
+                <div className="mt-auto pt-3 border-top border-dark">
                   <h6 className="fw-bold text-dark mb-0">
                     Rajesh Dry Cleaners
                   </h6>
-                  <small className="text-secondary">
+                  <small className="text-secondary fw-semibold">
                     Steam Press &amp; Dry Clean Shop • Navi Mumbai
                   </small>
                 </div>
@@ -1460,7 +1257,7 @@ export default function PricingPage() {
           <h3 className="fw-bolder text-dark mb-1">
             12 Frequently Asked Questions
           </h3>
-          <p className="text-secondary small">
+          <p className="text-secondary small fw-medium">
             Clear answers in simple words about our 7-day free trial, security,
             and billing
           </p>
@@ -1473,7 +1270,8 @@ export default function PricingPage() {
               return (
                 <div
                   key={idx}
-                  className="card border rounded-2 mb-2 bg-white shadow-sm"
+                  className="card rounded-0 mb-2 bg-white shadow-sm"
+                  style={{ border: "2px solid #0F172A" }}
                 >
                   <button
                     type="button"
@@ -1486,7 +1284,7 @@ export default function PricingPage() {
                     </span>
                   </button>
                   {isOpen && (
-                    <div className="px-3 pb-3 pt-2 text-secondary small border-top bg-light">
+                    <div className="px-3 pb-3 pt-2 text-secondary small fw-medium border-top border-dark bg-light">
                       {item.a}
                     </div>
                   )}
@@ -1500,17 +1298,21 @@ export default function PricingPage() {
       {/* ================= BOTTOM CALL TO ACTION BANNER ================= */}
       <section className="container mb-5">
         <div
-          className="rounded-3 p-4 p-md-5 text-center text-white shadow"
-          style={{ backgroundColor: "#0B132B", border: "2px solid #0284C7" }}
+          className="rounded-0 p-4 p-md-5 text-center text-white shadow"
+          style={{
+            backgroundColor: "#0B132B",
+            border: "3px solid #0F172A",
+            boxShadow: "10px 10px 0px #0284C7",
+          }}
         >
-          <span className="badge bg-warning text-dark rounded-1 px-3 py-1 fw-bold mb-2">
+          <span className="badge bg-warning text-dark rounded-0 px-3 py-1 fw-bold mb-2">
             7 DAYS FREE TRIAL — NO CREDIT CARD REQUIRED
           </span>
           <h2 className="fw-bolder mb-2 text-white">
             Try WashNora ERP in Your Laundry Shop Today
           </h2>
           <p
-            className="mx-auto mb-4 small"
+            className="mx-auto mb-4 small fw-medium"
             style={{ maxWidth: "600px", color: "#CBD5E1" }}
           >
             Send a message on WhatsApp or call us directly at{" "}
@@ -1521,14 +1323,16 @@ export default function PricingPage() {
           <div className="d-flex justify-content-center flex-wrap gap-3">
             <button
               onClick={() => handleWhatsAppTrial("7-Day Free Trial")}
-              className="btn btn-success btn-lg rounded-2 px-4 fw-bold d-flex align-items-center gap-2 shadow"
+              className="btn fw-bolder text-white px-4 py-3 d-flex align-items-center gap-2 neo-btn-green"
+              style={{ fontSize: "1rem" }}
             >
               <FaWhatsapp size={20} />
               <span>WhatsApp Trial: {ZENTECH_DISPLAY_PHONE}</span>
             </button>
             <a
               href={`tel:${ZENTECH_DISPLAY_PHONE.replace(/\s+/g, "")}`}
-              className="btn btn-outline-light btn-lg rounded-2 px-4 fw-bold d-flex align-items-center gap-2"
+              className="btn fw-bolder text-dark px-4 py-3 d-flex align-items-center gap-2 neo-btn-white"
+              style={{ fontSize: "1rem" }}
             >
               <FaPhoneAlt size={16} />
               <span>Call Now: {ZENTECH_DISPLAY_PHONE}</span>
@@ -1539,11 +1343,11 @@ export default function PricingPage() {
 
       {/* ================= STICKY BOTTOM TRIAL BAR ================= */}
       <div
-        className="position-fixed bottom-0 start-0 end-0 bg-white text-dark py-2 px-3 shadow-lg border-top d-flex justify-content-between align-items-center flex-wrap gap-2"
+        className="position-fixed bottom-0 start-0 end-0 bg-white text-dark py-2 px-3 shadow-lg border-top border-dark d-flex justify-content-between align-items-center flex-wrap gap-2"
         style={{ zIndex: 1050 }}
       >
-        <div className="small fw-bold d-flex align-items-center gap-2">
-          <span className="badge bg-success text-white rounded-1">
+        <div className="small fw-bolder d-flex align-items-center gap-2">
+          <span className="badge bg-success text-white rounded-0">
             FREE TRIAL
           </span>
           <span>
@@ -1554,20 +1358,76 @@ export default function PricingPage() {
         <div className="d-flex gap-2">
           <button
             onClick={() => handleWhatsAppTrial("7-Day Free Trial")}
-            className="btn btn-success btn-sm rounded-2 px-3 fw-bold d-flex align-items-center gap-1"
+            className="btn fw-bolder text-white px-3 py-1 neo-btn-green"
+            style={{ fontSize: "0.8rem" }}
           >
-            <FaWhatsapp size={15} />
+            <FaWhatsapp size={14} className="me-1" />
             <span>WhatsApp Us</span>
           </button>
           <a
             href={`tel:${ZENTECH_DISPLAY_PHONE.replace(/\s+/g, "")}`}
-            className="btn btn-dark btn-sm rounded-2 px-3 fw-bold d-flex align-items-center gap-1"
+            className="btn fw-bolder text-dark px-3 py-1 neo-btn-white"
+            style={{ fontSize: "0.8rem" }}
           >
-            <FaPhoneAlt size={12} />
-            <span>Call {ZENTECH_DISPLAY_PHONE}</span>
+            <FaPhoneAlt size={11} className="me-1" />
+            <span>Call Now</span>
           </a>
         </div>
       </div>
+
+      {/* ================= NEO-BRUTALIST STYLES ================= */}
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        .neo-card {
+          border: 2px solid #0F172A;
+          box-shadow: 6px 6px 0px #0F172A;
+          border-radius: 0px;
+          transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .neo-card:hover {
+          transform: translate(-3px, -3px);
+          box-shadow: 9px 9px 0px #0284C7;
+        }
+        .neo-btn-blue {
+          background-color: #0284C7;
+          border: 2px solid #0F172A;
+          box-shadow: 4px 4px 0px #0F172A;
+          border-radius: 0px;
+          transition: all 0.15s ease;
+        }
+        .neo-btn-blue:hover {
+          background-color: #0369A1;
+          transform: translate(-2px, -2px);
+          box-shadow: 6px 6px 0px #0F172A;
+        }
+        .neo-btn-green {
+          background-color: #059669;
+          border: 2px solid #0F172A;
+          box-shadow: 4px 4px 0px #0F172A;
+          border-radius: 0px;
+          transition: all 0.15s ease;
+        }
+        .neo-btn-green:hover {
+          background-color: #047857;
+          transform: translate(-2px, -2px);
+          box-shadow: 6px 6px 0px #0F172A;
+        }
+        .neo-btn-white {
+          background-color: #FFFFFF;
+          border: 2px solid #0F172A;
+          box-shadow: 4px 4px 0px #0F172A;
+          border-radius: 0px;
+          transition: all 0.15s ease;
+        }
+        .neo-btn-white:hover {
+          background-color: #F0F9FF;
+          transform: translate(-2px, -2px);
+          box-shadow: 6px 6px 0px #0284C7;
+        }
+      `,
+        }}
+      />
     </div>
   );
 }
