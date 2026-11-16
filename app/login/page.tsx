@@ -4,6 +4,10 @@ import Swal from "sweetalert2";
 import { supabase } from "../lib/supabaseClient";
 import { FcGoogle } from "react-icons/fc";
 
+const ZENTECH_SUPPORT_PHONE = "917738342274"; // +91 7738342274
+const ZENTECH_DISPLAY_PHONE = "+91 7738342274";
+const RAZORPAY_KEY_ID = "rzp_live_TTaH03kARMoEdZ";
+
 export default function LoginPage() {
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -11,17 +15,247 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
 
+  // B2B Suspension & Renewal Modal States
+  const [suspendedMsg, setSuspendedMsg] = useState<string | null>(null);
+  const [suspendedShop, setSuspendedShop] = useState<any>(null);
+  const [isRenewalModalOpen, setIsRenewalModalOpen] = useState<boolean>(false);
+  const [isPayingRenewal, setIsPayingRenewal] = useState<boolean>(false);
+
+  // Load Razorpay Checkout Script
+  const loadRazorpayScript = () => {
+    return new Promise((resolve) => {
+      if (typeof window !== "undefined" && (window as any).Razorpay) {
+        return resolve(true);
+      }
+      const script = document.createElement("script");
+      script.src = "https://checkout.razorpay.com/v1/checkout.js";
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+  };
+
+  // Helper: Verify if an Admin/Manager's store is Suspended or Expired
+  const verifyStoreSubscription = async (
+    userId: string,
+    userEmail?: string,
+  ) => {
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role, shop_id, full_name, phone")
+      .eq("id", userId)
+      .maybeSingle();
+
+    // Super Admin goes straight to stealth control center
+    const isSuperAdmin =
+      profile?.role === "superadmin" ||
+      userEmail?.toLowerCase().includes("zentech") ||
+      userEmail?.toLowerCase() === "tejasshinde021@gmail.com";
+
+    if (isSuperAdmin) {
+      return { allowed: true, redirectUrl: "/sys-telemetry", shop: null };
+    }
+
+    // Store Admin / Manager subscription check
+    if (profile?.role === "admin" || profile?.role === "manager") {
+      const assignedShopId = profile.shop_id || "SHOP-A";
+
+      const { data: shopData } = await supabase
+        .from("shops")
+        .select("*")
+        .eq("shop_id", assignedShopId)
+        .maybeSingle();
+
+      const isSubExpired =
+        shopData?.subscription_end &&
+        new Date(shopData.subscription_end).getTime() <= Date.now();
+
+      if (shopData?.status === "Suspended" || isSubExpired) {
+        const msg =
+          shopData?.suspension_reason ||
+          "Your subscription has been ended. Please renew to continue the service.";
+        return {
+          allowed: false,
+          message: msg,
+          redirectUrl: "/login",
+          shop: shopData || {
+            shop_id: assignedShopId,
+            shop_name: `WashNora (${assignedShopId})`,
+            owner_name: profile?.full_name || "Store Admin",
+            owner_phone: profile?.phone || "",
+            last_invoice_amount: 4999,
+          },
+        };
+      }
+    }
+
+    return { allowed: true, redirectUrl: "/dashboard", shop: null };
+  };
+
   useEffect(() => {
+    // 1. Check URL query params for ?suspended=1 or ?suspended=true
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const isSusp =
+        params.get("suspended") === "1" || params.get("suspended") === "true";
+
+      if (isSusp) {
+        const customMsg =
+          params.get("msg") ||
+          "Your subscription has been ended. Please renew to continue the service.";
+        const paramShopId = params.get("shop_id") || "SHOP-A";
+
+        setSuspendedMsg(customMsg);
+
+        // Fetch shop details so renewal modal has exact store name & amount
+        supabase
+          .from("shops")
+          .select("*")
+          .eq("shop_id", paramShopId)
+          .maybeSingle()
+          .then(({ data }) => {
+            setSuspendedShop(
+              data || {
+                shop_id: paramShopId,
+                shop_name: "WashNora Laundry Store",
+                owner_name: "Store Partner",
+                last_invoice_amount: 4999,
+              },
+            );
+            setIsRenewalModalOpen(true);
+          });
+      }
+    }
+
+    // 2. Check existing session (e.g. after Google OAuth or page refresh)
     const checkSession = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (session) {
-        window.location.href = "/dashboard";
+
+      if (session?.user) {
+        const check = await verifyStoreSubscription(
+          session.user.id,
+          session.user.email,
+        );
+
+        if (!check.allowed) {
+          await supabase.auth.signOut();
+          setSuspendedMsg(check.message || null);
+          setSuspendedShop(check.shop);
+          setIsRenewalModalOpen(true);
+          return;
+        }
+
+        window.location.href = check.redirectUrl;
       }
     };
     checkSession();
   }, []);
+
+  // ================= INSTANT ONLINE RENEWAL VIA RAZORPAY =================
+  const handleInstantRazorpayRenewal = async () => {
+    const targetShop = suspendedShop || {
+      shop_id: "SHOP-A",
+      shop_name: "WashNora Store",
+      owner_name: email || "Store Owner",
+      last_invoice_amount: 4999,
+    };
+    const renewalAmount = parseFloat(targetShop.last_invoice_amount) || 4999;
+
+    setIsPayingRenewal(true);
+    const loaded = await loadRazorpayScript();
+    if (!loaded) {
+      setIsPayingRenewal(false);
+      Swal.fire("Error", "Failed to load Razorpay payment gateway.", "error");
+      return;
+    }
+
+    const options = {
+      key: RAZORPAY_KEY_ID,
+      amount: renewalAmount * 100,
+      currency: "INR",
+      name: "Zen-Tech International",
+      description: `30-Day ERP Subscription Renewal — ${targetShop.shop_name}`,
+      handler: async function (response: any) {
+        const newEnd = new Date();
+        newEnd.setDate(newEnd.getDate() + 30);
+        const nowIso = new Date().toISOString();
+
+        // 1. Reactivate Store in Supabase & Extend by +30 Days
+        await supabase
+          .from("shops")
+          .update({
+            status: "Active",
+            suspension_reason: null,
+            subscription_end: newEnd.toISOString(),
+            last_paid_at: nowIso,
+          })
+          .eq("shop_id", targetShop.shop_id);
+
+        // 2. Log Paid B2B Invoice in saas_invoices
+        await supabase.from("saas_invoices").insert([
+          {
+            shop_id: targetShop.shop_id,
+            shop_name: targetShop.shop_name,
+            owner_name: targetShop.owner_name || "Store Partner",
+            owner_phone: targetShop.owner_phone || "",
+            amount: renewalAmount,
+            billing_period: `Online Renewal [Razorpay: ${response.razorpay_payment_id}]`,
+            payment_status: "Paid",
+            paid_at: nowIso,
+          },
+        ]);
+
+        setIsPayingRenewal(false);
+        setIsRenewalModalOpen(false);
+        setSuspendedMsg(null);
+
+        await Swal.fire({
+          icon: "success",
+          title: "Subscription Renewed & Activated!",
+          html: `Payment ID: <strong>${response.razorpay_payment_id}</strong><br/>Your store <strong>${targetShop.shop_name}</strong> is now Active for the next 30 days. Please sign in below.`,
+          confirmButtonColor: "#198754",
+        });
+      },
+      prefill: {
+        name: targetShop.owner_name || "",
+        email: targetShop.owner_email || email || "",
+        contact: targetShop.owner_phone || "",
+      },
+      theme: { color: "#0d6efd" },
+      modal: {
+        ondismiss: () => setIsPayingRenewal(false),
+      },
+    };
+
+    const rzp = new (window as any).Razorpay(options);
+    rzp.open();
+  };
+
+  // ================= MANUAL RENEWAL VIA WHATSAPP (+91 7738342274) =================
+  const handleWhatsAppManualRenewal = () => {
+    const shopId = suspendedShop?.shop_id || "SHOP-A";
+    const shopName = suspendedShop?.shop_name || "WashNora Store";
+    const amount = suspendedShop?.last_invoice_amount || 4999;
+
+    const message = `*ZEN-TECH ERP — SUBSCRIPTION RENEWAL REQUEST* 🛡️
+-----------------------------------------
+Hello Zen-Tech Support Team,
+I would like to renew my Laundry ERP software subscription.
+
+*Store ID:* ${shopId}
+*Store Name:* ${shopName}
+*Admin Email:* ${email || suspendedShop?.owner_email || "N/A"}
+*Renewal Amount:* ₹${amount}
+-----------------------------------------
+Please share the payment confirmation or activate my store subscription. Thank you!`;
+
+    const waUrl = `https://wa.me/${ZENTECH_SUPPORT_PHONE}?text=${encodeURIComponent(
+      message,
+    )}`;
+    window.open(waUrl, "_blank");
+  };
 
   const handleEmailAuth = async (e: any) => {
     e.preventDefault();
@@ -33,17 +267,34 @@ export default function LoginPage() {
         password,
       });
 
-      if (error) {
+      // 1. Handle wrong email/password FIRST so data.user is never null
+      if (error || !data?.user) {
         Swal.fire({
           icon: "error",
           title: "Authentication Failed",
-          text: error.message,
+          text: error?.message || "Invalid login credentials.",
           confirmButtonColor: "#0d6efd",
         });
         setLoading(false);
         return;
       }
 
+      // 2. Check if Store Admin's subscription is active or suspended
+      const subCheck = await verifyStoreSubscription(
+        data.user.id,
+        data.user.email,
+      );
+
+      if (!subCheck.allowed) {
+        await supabase.auth.signOut();
+        setSuspendedMsg(subCheck.message || null);
+        setSuspendedShop(subCheck.shop);
+        setLoading(false);
+        setIsRenewalModalOpen(true);
+        return;
+      }
+
+      // 3. Login allowed -> Redirect to /dashboard (or /sys-telemetry for Super Admin)
       if (data?.session) {
         Swal.fire({
           icon: "success",
@@ -52,11 +303,11 @@ export default function LoginPage() {
           timer: 1000,
         });
         setTimeout(() => {
-          window.location.href = "/dashboard";
+          window.location.href = subCheck.redirectUrl;
         }, 1000);
       }
     } else {
-      const { data, error } = await supabase.auth.signUp({
+      const { error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { full_name: fullName } },
@@ -102,8 +353,142 @@ export default function LoginPage() {
     }
   };
 
+  // Dynamic QR Code URL for scanning payment / WhatsApp contact
+  const renewalAmount = suspendedShop?.last_invoice_amount || 4999;
+  const upiQrData = `upi://pay?pa=7738342274@upi&pn=Zen-Tech%20International&am=${renewalAmount}&cu=INR&tn=ERP%20Renewal%20${
+    suspendedShop?.shop_id || "SHOP-A"
+  }`;
+  const qrImageUrl = `https://api.qrserver.com/v1/create-qr-code/?size=190x190&data=${encodeURIComponent(
+    upiQrData,
+  )}`;
+
   return (
-    <div className="d-flex w-100 vh-100 overflow-hidden bg-white">
+    <div className="d-flex w-100 vh-100 overflow-hidden bg-white position-relative">
+      {/* ================= B2B SUBSCRIPTION RENEWAL MODAL (RAZORPAY + QR SCANNER + WHATSAPP) ================= */}
+      {isRenewalModalOpen && (
+        <div
+          className="position-fixed top-0 start-0 w-100 h-100 d-flex justify-content-center align-items-center fade-in-anim"
+          style={{
+            backgroundColor: "rgba(10, 17, 40, 0.78)",
+            zIndex: 9999,
+            backdropFilter: "blur(6px)",
+          }}
+        >
+          <div
+            className="bg-white rounded-4 shadow-lg p-4 position-relative"
+            style={{
+              width: "92%",
+              maxWidth: "480px",
+              maxHeight: "92vh",
+              overflowY: "auto",
+            }}
+          >
+            <button
+              onClick={() => setIsRenewalModalOpen(false)}
+              className="btn-close position-absolute top-0 end-0 m-3"
+            ></button>
+
+            <div className="text-center mb-3">
+              <div
+                className="rounded-circle bg-danger bg-opacity-10 text-danger d-flex justify-content-center align-items-center mx-auto mb-2 border border-danger border-opacity-25"
+                style={{ width: "54px", height: "54px", fontSize: "1.5rem" }}
+              >
+                <i className="bi bi-shield-lock-fill"></i>
+              </div>
+              <span className="badge bg-danger text-white rounded-pill px-3 py-1 mb-1">
+                SUBSCRIPTION ENDED / STORE SUSPENDED
+              </span>
+              <h5 className="fw-bold text-dark mb-1">
+                Renew Your Zen-Tech ERP License
+              </h5>
+              <p className="text-danger small fw-semibold mb-0 px-2">
+                {suspendedMsg ||
+                  "Your subscription has been ended. Please renew to continue the service."}
+              </p>
+            </div>
+
+            {/* Store & Plan Summary */}
+            <div className="bg-light p-3 rounded-3 border mb-3 d-flex justify-content-between align-items-center">
+              <div>
+                <small className="text-muted fw-bold text-uppercase d-block">
+                  Store Branch
+                </small>
+                <span className="fw-bold text-dark small">
+                  {suspendedShop?.shop_name || "WashNora Store"} (
+                  {suspendedShop?.shop_id || "SHOP-A"})
+                </span>
+              </div>
+              <div className="text-end">
+                <small className="text-muted fw-bold text-uppercase d-block">
+                  Renewal Fee
+                </small>
+                <span className="fw-bolder text-primary fs-5">
+                  ₹{renewalAmount}
+                </span>
+              </div>
+            </div>
+
+            {/* QR Code Scanner Box */}
+            <div className="text-center p-3 rounded-3 border bg-white mb-3 shadow-sm">
+              <div className="fw-bold text-dark small mb-1">
+                <i className="bi bi-qr-code-scan text-primary me-1"></i> Scan QR
+                Code with Any UPI App to Pay
+              </div>
+              <small className="text-secondary d-block mb-2">
+                GPay • PhonePe • Paytm • BHIM (Zen-Tech International)
+              </small>
+              <div className="d-inline-block p-2 bg-white border rounded-3 shadow-sm">
+                <img
+                  src={qrImageUrl}
+                  alt="Zen-Tech Renewal Payment QR Code"
+                  style={{ width: "165px", height: "165px" }}
+                />
+              </div>
+              <small className="text-muted d-block mt-2">
+                After scanning QR, click the WhatsApp button below to share the
+                screenshot for instant activation.
+              </small>
+            </div>
+
+            {/* Action Buttons: Instant Razorpay OR Manual WhatsApp */}
+            <div className="d-flex flex-column gap-2">
+              <button
+                type="button"
+                onClick={handleInstantRazorpayRenewal}
+                disabled={isPayingRenewal}
+                className="btn btn-primary w-100 fw-bold py-2 rounded-3 shadow-sm d-flex justify-content-center align-items-center gap-2"
+              >
+                <i className="bi bi-lightning-charge-fill text-warning"></i>
+                <span>
+                  {isPayingRenewal
+                    ? "Opening Razorpay..."
+                    : `Pay ₹${renewalAmount} Online via Razorpay (Auto-Activate)`}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleWhatsAppManualRenewal}
+                className="btn btn-success w-100 fw-bold py-2 rounded-3 shadow-sm d-flex justify-content-center align-items-center gap-2"
+              >
+                <i className="bi bi-whatsapp fs-6"></i>
+                <span>
+                  Renew Manually on WhatsApp ({ZENTECH_DISPLAY_PHONE})
+                </span>
+              </button>
+
+              <a
+                href={`tel:${ZENTECH_DISPLAY_PHONE.replace(/\s+/g, "")}`}
+                className="btn btn-outline-dark btn-sm w-100 fw-semibold py-2 rounded-3 mt-1"
+              >
+                <i className="bi bi-telephone-outbound-fill me-2 text-primary"></i>
+                Call Zen-Tech Support: {ZENTECH_DISPLAY_PHONE}
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* LEFT PANEL: Edge-to-Edge Flexible Auth Form */}
       <div
         className="d-flex flex-column justify-content-center position-relative auth-panel slide-up-anim"
@@ -125,6 +510,34 @@ export default function LoginPage() {
                 ? "Access your clean laundry workspace."
                 : "Create an account to streamline operations."}
             </p>
+
+            {/* Persistent Suspension Alert + Renew Now Trigger */}
+            {suspendedMsg && (
+              <div className="alert alert-danger border-0 shadow-sm rounded-3 p-3 mt-3 mb-0">
+                <div className="d-flex align-items-start gap-2 mb-2">
+                  <i className="bi bi-exclamation-triangle-fill text-danger mt-1"></i>
+                  <span className="small fw-semibold">{suspendedMsg}</span>
+                </div>
+                <div className="d-flex flex-wrap gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsRenewalModalOpen(true)}
+                    className="btn btn-danger btn-sm rounded-pill px-3 fw-bold"
+                  >
+                    <i className="bi bi-qr-code-scan me-1"></i> Renew Now (QR /
+                    Razorpay)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleWhatsAppManualRenewal}
+                    className="btn btn-success btn-sm rounded-pill px-3 fw-bold"
+                  >
+                    <i className="bi bi-whatsapp me-1"></i>{" "}
+                    {ZENTECH_DISPLAY_PHONE}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <button
@@ -233,7 +646,7 @@ export default function LoginPage() {
             </button>
           </form>
 
-          <div className="mt-4 text-start">
+          <div className="mt-4 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <button
               onClick={() => {
                 setIsLogin(!isLogin);
@@ -247,6 +660,15 @@ export default function LoginPage() {
               {isLogin
                 ? "New to the platform? Create an account."
                 : "Already have an account? Sign in."}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsRenewalModalOpen(true)}
+              className="bg-transparent border-0 p-0 text-danger fw-bold hover-opacity"
+              style={{ fontSize: "0.76rem" }}
+            >
+              <i className="bi bi-qr-code me-1"></i>Store Renewal / Support
             </button>
           </div>
         </div>
@@ -494,7 +916,7 @@ export default function LoginPage() {
 
         /* General Animations */
         .slide-up-anim { animation: slideUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-        .fade-in-anim { animation: fadeIn 1s ease forwards; }
+        .fade-in-anim { animation: fadeIn 0.35s ease forwards; }
         
         @keyframes slideUp {
           from { opacity: 0; transform: translateY(30px); }

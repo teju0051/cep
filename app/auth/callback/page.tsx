@@ -39,7 +39,6 @@ export default function AuthCallbackPage() {
         }
       }
 
-      // 3. Fallback: Check if an active session already exists in storage/cookies
       const {
         data: { session },
       } = await supabase.auth.getSession();

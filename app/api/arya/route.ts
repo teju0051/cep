@@ -323,7 +323,7 @@ Instructions: You are Arya, an administrative ERP assistant. If the user tells y
         const toolCall = completion.choices[0]?.message?.tool_calls?.[0];
         if (toolCall) {
           const args = JSON.parse(toolCall.function.arguments);
-          console.log("⚡ Executed via Tier 3 (NVIDIA NIM)");
+          console.log(" Executed via Tier 3 (NVIDIA NIM)");
           return formatToolResponse(toolCall.function.name, args);
         }
       } catch (nvidiaError: any) {
@@ -339,7 +339,7 @@ Instructions: You are Arya, an administrative ERP assistant. If the user tells y
       message: "All AI services failed or quotas are exhausted.",
     });
   } catch (error) {
-    console.error("🚨 CRITICAL ERROR:", error);
+    console.error(" CRITICAL ERROR:", error);
     return NextResponse.json(
       { action: "SPEAK", message: "Server encountered an unexpected error." },
       { status: 500 },
