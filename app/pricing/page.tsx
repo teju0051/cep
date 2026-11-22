@@ -10,23 +10,16 @@ import {
   FaStore,
   FaBuilding,
   FaChartLine,
-  FaShieldAlt,
   FaStar,
   FaPlus,
   FaMinus,
   FaSignInAlt,
-  FaFileInvoiceDollar,
-  FaBoxes,
-  FaUserLock,
-  FaTruck,
-  FaMicrophoneAlt,
   FaCalculator,
-  FaBolt,
 } from "react-icons/fa";
 
 const ZENTECH_WHATSAPP = "917738342274";
 const ZENTECH_DISPLAY_PHONE = "+91 7738342274";
-const RAZORPAY_KEY_ID = "rzp_live_U3B947oYBi0zx9";
+const RAZORPAY_KEY_ID = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? "";
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(
@@ -52,6 +45,15 @@ export default function PricingPage() {
   };
 
   const handleCheckoutPlan = async (planName: string, amount: number) => {
+    if (!RAZORPAY_KEY_ID) {
+      Swal.fire(
+        "Configuration Error",
+        "Razorpay API key is missing in environment variables.",
+        "error",
+      );
+      return;
+    }
+
     setLoadingTier(planName);
     const loaded = await loadRazorpayScript();
     if (!loaded) {
@@ -60,12 +62,23 @@ export default function PricingPage() {
       return;
     }
 
+    const logoUrl =
+      typeof window !== "undefined" && window.location.protocol === "https:"
+        ? `${window.location.origin}/zentech-logo.png`
+        : undefined;
+
     const options = {
       key: RAZORPAY_KEY_ID,
-      amount: amount * 100,
+      amount: Math.round(amount * 100),
       currency: "INR",
       name: "Zen-Tech International",
       description: `WashNora Laundry ERP — ${planName} (${billingCycle.toUpperCase()})`,
+      ...(logoUrl ? { image: logoUrl } : {}),
+      notes: {
+        provider: "Zen-Tech International",
+        plan: planName,
+        billing_cycle: billingCycle,
+      },
       handler: async function (response: any) {
         setLoadingTier(null);
         Swal.fire({
