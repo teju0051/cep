@@ -15,7 +15,7 @@ import {
 
 const ZENTECH_SUPPORT_PHONE = "917738342274"; // +91 7738342274
 const ZENTECH_DISPLAY_PHONE = "+91 7738342274";
-const RAZORPAY_KEY_ID = "rzp_live_TTaH03kARMoEdZ";
+const RAZORPAY_KEY_ID = "rzp_live_U3B947oYBi0zx9";
 
 // Strictly whitelisted Super Admin emails (in addition to profile.role === 'superadmin')
 const SUPERADMIN_EMAILS = ["tejasshinde021@gmail.com"];

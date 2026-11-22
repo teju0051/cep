@@ -26,7 +26,7 @@ import {
 
 const ZENTECH_WHATSAPP = "917738342274";
 const ZENTECH_DISPLAY_PHONE = "+91 7738342274";
-const RAZORPAY_KEY_ID = "rzp_live_TTaH03kARMoEdZ";
+const RAZORPAY_KEY_ID = "rzp_live_U3B947oYBi0zx9";
 
 export default function PricingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">(
@@ -216,24 +216,6 @@ export default function PricingPage() {
               alt="WashNora ERP"
               style={{ height: "40px", objectFit: "contain" }}
             />
-            <div className="border-start border-2 border-dark ps-3">
-              <span
-                className="fw-bolder fs-5 text-dark d-block"
-                style={{ letterSpacing: "-0.4px", lineHeight: 0.95 }}
-              >
-                WASH<span style={{ color: "#0284C7" }}>NORA</span>
-              </span>
-              <span
-                className="fw-bolder text-uppercase d-block mt-1"
-                style={{
-                  fontSize: "0.62rem",
-                  color: "#0284C7",
-                  letterSpacing: "1.2px",
-                }}
-              >
-                CLOUD LAUNDRY ERP • BY ZEN-TECH
-              </span>
-            </div>
           </Link>
 
           <div className="d-flex align-items-center gap-2">
@@ -269,19 +251,6 @@ export default function PricingPage() {
         }}
       >
         <div className="container py-2">
-          <div
-            className="d-inline-flex align-items-center gap-2 px-3 py-1 mb-3 fw-bolder text-uppercase bg-white"
-            style={{
-              border: "2px solid #0F172A",
-              boxShadow: "4px 4px 0px #0284C7",
-              fontSize: "0.72rem",
-              letterSpacing: "0.8px",
-            }}
-          >
-            <FaShieldAlt style={{ color: "#0284C7" }} />
-            <span>TRANSPARENT B2B SAAS PRICING • NO HIDDEN FEES</span>
-          </div>
-
           <h1
             className="fw-bolder display-6 text-dark mb-2"
             style={{ letterSpacing: "-0.5px" }}
@@ -341,16 +310,6 @@ export default function PricingPage() {
           <div className="col-lg-4">
             <div className="p-4 bg-white h-100 neo-card d-flex flex-column">
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <span
-                  className="badge rounded-0 px-2 py-1 fw-bolder text-uppercase"
-                  style={{
-                    backgroundColor: "#F1F5F9",
-                    color: "#475569",
-                    border: "1px solid #CBD5E1",
-                  }}
-                >
-                  SINGLE LAUNDRY SHOP
-                </span>
                 <FaStore className="text-secondary" size={20} />
               </div>
 
@@ -491,9 +450,6 @@ export default function PricingPage() {
               }}
             >
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <span className="badge bg-warning text-dark rounded-0 px-2 py-1 fw-bold">
-                  MOST POPULAR — BEST ROI
-                </span>
                 <FaChartLine className="text-info" size={20} />
               </div>
 
@@ -633,16 +589,6 @@ export default function PricingPage() {
           <div className="col-lg-4">
             <div className="p-4 bg-white h-100 neo-card d-flex flex-column">
               <div className="d-flex justify-content-between align-items-center mb-2">
-                <span
-                  className="badge rounded-0 px-2 py-1 fw-bolder text-uppercase"
-                  style={{
-                    backgroundColor: "#ECFDF5",
-                    color: "#047857",
-                    border: "1px solid #059669",
-                  }}
-                >
-                  FOR 2 TO 10+ BRANCHES
-                </span>
                 <FaBuilding className="text-success" size={20} />
               </div>
 
